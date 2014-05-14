@@ -15,9 +15,8 @@ exports.createFileSystem = function (volume) {
     var sectorBuffer = new Buffer(512);
     
     volume.read(sectorBuffer, 0, 512, 0, function (e,n) {
-        var d = S.bootBase.valueFromBytes(sectorBuffer);
+        var d = S.boot16.valueFromBytes(sectorBuffer);
         console.log(e,n,d);
-        
         
         var rootDirSectors = ((d.RootEntCnt * 32) + (d.BytsPerSec - 1)) / d.BytsPerSec;
         console.log("RootDirSectors", rootDirSectors);

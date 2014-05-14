@@ -3,7 +3,7 @@
 
 var _ = require('struct-fu');
 
-exports.bootBase = _.struct([
+var bootBase = _.struct([
     _.byte('jmpBoot', 3),
     _.char('OEMName', 8),
     _.uint16le('BytsPerSec'),
@@ -20,7 +20,7 @@ exports.bootBase = _.struct([
     _.uint32le('TotSec32')
 ]);
 
-exports.boot16 = _.struct([
+var bootInfo = _.struct([
     _.uint8('DrvNum'),
     _.uint8('Reserved1'),
     _.uint8('BootSig'),
@@ -29,7 +29,13 @@ exports.boot16 = _.struct([
     _.char('FilSysType', 8)
 ]);
 
+exports.boot16 = _.struct([
+    bootBase,
+    bootInfo
+]);
+
 exports.boot32 = _.struct([
+    bootBase,
     _.uint32le('FATSz32'),
     _.struct('ExtFlags', [
         _.ubit('NumActiveFAT', 4),
@@ -43,13 +49,7 @@ exports.boot32 = _.struct([
     ]),
     _.uint32le('RootClus'),
     _.uint16le('FSInfo'),
-    _.unit16le('BkBootSec'),
+    _.uint16le('BkBootSec'),
     _.byte('Reserved', 12),
-    // NOTE: this is exports.boot16
-    _.uint8('DrvNum'),
-    _.uint8('Reserved1'),
-    _.uint8('BootSig'),
-    _.uint32le('VolID'),
-    _.char('VolLab', 11),
-    _.char('FilSysType', 8)
+    bootInfo
 ]);
