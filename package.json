@@ -22,5 +22,8 @@
   "bugs": {
     "url": "https://github.com/natevw/fatfs/issues"
   },
-  "homepage": "https://github.com/natevw/fatfs"
+  "homepage": "https://github.com/natevw/fatfs",
+  "dependencies": {
+    "struct-fu": "^0.1.0"
+  }
 }
