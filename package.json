@@ -1,0 +1,26 @@
+{
+  "name": "fatfs",
+  "version": "0.0.0",
+  "description": "fs implementation on top of raw FAT16/FAT32 block source",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/natevw/fatfs"
+  },
+  "keywords": [
+    "filesystem",
+    "fs",
+    "fat",
+    "fat32",
+    "fat16"
+  ],
+  "author": "Nathan Vander Wilt",
+  "license": "Apache-2.0",
+  "bugs": {
+    "url": "https://github.com/natevw/fatfs/issues"
+  },
+  "homepage": "https://github.com/natevw/fatfs"
+}
