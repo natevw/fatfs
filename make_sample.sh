@@ -20,9 +20,10 @@ case "$TYPE" in
     ;;
     "FAT32") : ${SIZE:=33}          # >32
     ;;
+    *) : ${SIZE:=1}                 # e.g. ExFAT
 esac
 
-echo Making $TYPE of $SIZE MB
+echo Making $TYPE of $SIZE MB at $FILE
 
 if [[ "$TYPE" = FAT* ]]
 then
