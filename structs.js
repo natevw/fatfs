@@ -8,7 +8,7 @@ var bootBase = _.struct([
     _.char('OEMName', 8),
     _.uint16le('BytsPerSec'),
     _.uint8('SecPerClus'),
-    _.uint16le('RsvdSecCnt'),
+    _.uint16le('ResvdSecCnt'),      // Rsvd in table, but Resvd in calcs…
     _.uint8('NumFATs'),
     _.uint16le('RootEntCnt'),
     _.uint16le('TotSec16'),
