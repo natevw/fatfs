@@ -1,26 +1,26 @@
-var TEST_IMAGE;                 // TODO: include these in repo
-switch (process.argv[2]) {
-    case 'fat12':
-        TEST_IMAGE = "/Users/natevw/Desktop/fat-rw.dmg";
-        break;
-    case 'fat16':
-        // TODO: make FAT16 image…
-        throw Error("No image available.");
-    case 'fat32':
-        // created via `diskutil eraseVolume FAT32 "TEST" /dev/disk2`
-        TEST_IMAGE = "/Users/natevw/Desktop/fat32small.dmg";
-        break;
-    case 'exfat':
-        TEST_IMAGE = "/Users/natevw/Desktop/exfat.dmg";
-        break;
-    default:
-        throw "Usage: node test [fat12|fat16|fat32|exfat]";
-}
+var type = process.argv[2],
+    uniq = Math.random().toString(36).slice(2),
+    IMG = require('os').tmpdir()+"fatfs-test-"+uniq+".img";
+if (!type) throw "Usage: node test [FAT12|FAT16|FAT32|ExFAT|…]";
 
-var fatfs = require("./index.js"),
-    vol = require("./img_volume.js").createDriverSync(TEST_IMAGE),
-    fs = fatfs.createFileSystem(vol);
-
-fs.readdir("/", function () {
+require('child_process').exec("./make_sample.sh "+JSON.stringify(IMG)+" "+JSON.stringify(type), function (e,out,err) {
+    if (e) throw e;
+    console.warn(err.toString());
+    console.log(out.toString());
     
+    var fatfs = require("./index.js"),
+        vol = require("./img_volume.js").createDriverSync(IMG),
+        fs = fatfs.createFileSystem(vol);
+    
+    require('fs').unlink(IMG, function (e) {
+        if (e) console.warn("Error cleaning up test image", e);
+    });
+    
+    fs.readdir("/", function () {
+        
+    });
 });
+
+
+
+
