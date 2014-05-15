@@ -53,3 +53,42 @@ exports.boot32 = _.struct([
     _.byte('Reserved', 12),
     bootInfo
 ]);
+
+var time = _.struct([
+    _.ubit('hour',5),
+    _.ubit('minutes',6),
+    _.ubit('seconds',5)
+]);
+
+var date = _.struct('date', [
+    _.ubit('year',7),
+    _.ubit('month',4),
+    _.ubit('day',5)
+]);
+
+
+exports.dirEntry = _.struct([
+    _.struct('Name', [
+        _.char('filename',8),
+        _.char('extension',3)
+    ]),
+    _.struct('Attr', [
+        _.bool('readonly'),
+        _.bool('hidden'),
+        _.bool('system'),
+        _.bool('volume_id'),
+        _.bool('directory'),
+        _.bool('archive'),
+        _.ubit('reserved', 2)
+    ].reverse()),
+    _.byte('NTRes', 1),
+    _.uint8('CrtTimeTenth'),
+    _.struct('CrtTime', [time]),
+    _.struct('CrtDate', [date]),
+    _.struct('LastAccDate', [date]),
+    _.uint16le('FstClusHI'),
+    _.struct('WrtTime', [time]),
+    _.struct('WrtDate', [date]),
+    _.uint16le('FstClusLO'),
+    _.uint32le('FileSize')
+]);

@@ -62,17 +62,19 @@ exports.createFileSystem = function (volume) {
         
         console.log("rootDirSectors", rootDirSectors, "firstDataSector", firstDataSector, "countofClusters", countofClusters, "=>", fatType);
         
-        function tablePos(n) {
-            
-            
+        var firstRootDirSecNum = (isFAT16) ? d.ResvdSecCnt + d.NumFATs*d.FATSz16 : findInFAT(d.RootClus);
+        console.log("firstRootDirSecNum", firstRootDirSecNum);
+        
+        // TODO: fetch root directory entry
+        // TODO: chase files through (first) FAT
+        
+        function findInFAT(n) {
+            // TODO: needs to handle FAT12
+            var scale = 2;
             var FATOffset = n * scale,
                 ThisFATSecNum = d.ResvdSecCnt + Math.floor(FATOffset / d.BytsPerSec);
                 ThisFATEntOffset = FATOffset % d.BytsPerSec;
         }
-        
-        
-        
-        
         
         d.TotSec16
         
