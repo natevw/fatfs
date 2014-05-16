@@ -54,7 +54,7 @@ exports.createFileSystem = function (volume) {
         if (!d.BytsPerSec) throw Error("This looks like an ExFAT volume! (unsupported)");
         setSectorSize(d.BytsPerSec);
         
-        console.log(d);
+//console.log(d);
         
         var FATSz = (isFAT16) ? d.FATSz16 : d.FATSz32,
             rootDirSectors = Math.ceil((d.RootEntCnt * 32) / d.BytsPerSec),
@@ -75,10 +75,10 @@ exports.createFileSystem = function (volume) {
         // TODO: abort if (TotSec16/32 > DskSz) to e.g. avoid corrupting subsequent partitions!
         
         
-        console.log("rootDirSectors", rootDirSectors, "firstDataSector", firstDataSector, "countofClusters", countofClusters, "=>", fatType);
+//console.log("rootDirSectors", rootDirSectors, "firstDataSector", firstDataSector, "countofClusters", countofClusters, "=>", fatType);
         
         var firstRootDirSecNum = d.ResvdSecCnt + ((isFAT16) ? d.NumFATs*d.FATSz16 : d.RootClus*d.SecPerClus);
-        console.log("firstRootDirSecNum", firstRootDirSecNum);
+//console.log("firstRootDirSecNum", firstRootDirSecNum);
         
 //        readSector(firstRootDirSecNum, function (e) {
 //            if (e) throw e;
@@ -94,26 +94,43 @@ exports.createFileSystem = function (volume) {
         
         function fetchFromFAT(clusterNum, cb) {
             var entryStruct = S.fatField[fatType],
-                FATOffset = Math.floor(clusterNum * entryStruct.size),              // TODO: this is wrong for FAT12!
+                FATOffset = (fatType === 'fat12') ? Math.floor(clusterNum/2) * entryStruct.size : clusterNum * entryStruct.size,
                 SecNum = d.ResvdSecCnt + Math.floor(FATOffset / d.BytsPerSec);
                 EntOffset = FATOffset % d.BytsPerSec;
             readFromSectorOffset(SecNum, EntOffset, entryStruct.size, function (e) {
                 if (e) return cb(e);
                 var entry = entryStruct.valueFromBytes(sectorBuffer);
-                if (fatType === 'fat12') entry = entry[clusterNum % 2];
-                else if (fatType === 'fat32') entry &= 0x0FFFFFFF;
-                return entry;
+                if (fatType === 'fat12') {
+                    if (clusterNum % 2) {
+                        entry.NextCluster = (entry.NextCluster0a << 8) + entry.NextCluster0bc;
+                    } else {
+                        entry.NextCluster = (entry.NextCluster1ab << 4) + entry.NextCluster1c;
+                    }
+                }
+                else if (fatType === 'fat32') entry.NextCluster &= 0x0FFFFFFF;
+                cb(null, entry.NextCluster);
             });
         }
         
-        fetchFromFAT(3, function () {});
+        fetchFromFAT(2, function (e,d) {
+            if (e) throw e;
+            else console.log("Next cluster is", d.toString(16));
+            fetchFromFAT(3, function (e,d) {
+                if (e) throw e;
+                else console.log("Next cluster is", d.toString(16));
+                fetchFromFAT(4, function (e,d) {
+                    if (e) throw e;
+                    else console.log("Next cluster is", d.toString(16));
+                });
+            });
+        });
         
         //d.BytsPerSec
     });
     
     fs.readdir = function (path, cb) {
         var steps = absoluteSteps(path);
-        console.log("STEPS", steps);
+        console.log("readdir steps:", steps);
     };
     
     return fs;

@@ -95,7 +95,10 @@ exports.dirEntry = _.struct([
 
 exports.fatField = {
     'fat12': _.struct([
-        _.ubit('NextCluster', 12, 2),
+        _.ubit('NextCluster0bc', 8),
+        _.ubit('NextCluster1c', 4),
+        _.ubit('NextCluster0a', 4),
+        _.ubit('NextCluster1ab', 8),
     ]),
     'fat16': _.struct([
         _.uint16le('NextCluster'),
