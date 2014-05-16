@@ -92,3 +92,21 @@ exports.dirEntry = _.struct([
     _.uint16le('FstClusLO'),
     _.uint32le('FileSize')
 ]);
+
+exports.fatField = {
+    'fat12': _.struct([
+        _.ubit('NextCluster', 12, 2),
+    ]),
+    'fat16': _.struct([
+        _.uint16le('NextCluster'),
+    ]),
+    'fat32': _.struct([
+        /* more properly, this is:
+        _.ubit('reserved', 4),
+        _.ubitLE('NextCluster', 28)
+        */
+        _.uint32le('NextCluster')
+    ]),
+};
+
+

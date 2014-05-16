@@ -29,20 +29,32 @@ function tryBoth(d) {
 exports.createFileSystem = function (volume) {
     var fs = {};
     
-    var sectorBuffer = new Buffer(512);
-    
-    
-    
+    var sectorBuffer;               // NOTE: must 
+    function setSectorSize(len) {
+        if (!sectorBuffer || sectorBuffer.length !== len) sectorBuffer = new Buffer(len);
+    }
+    function readSector(secNum, cb) {
+        var secSize = sectorBuffer.length;
+        volume.read(sectorBuffer, 0, secSize, secNum*secSize, cb);
+    }
+    function readFromSectorOffset(secNum, offset, len, cb) {
+        var secSize = sectorBuffer.length;
+        volume.read(sectorBuffer, 0, len, secNum*secSize+offset, cb);
+    }
     
     // TODO: when/where to do this stuff? do we need a 'ready' event… :-(
-    volume.read(sectorBuffer, 0, 512, 0, function (e,n) {
+    setSectorSize(512);
+    readSector(0, function (e) {
+        if (e) throw e;
+        
         if (sectorBuffer[510] !== 0x55 || sectorBuffer[511] !== 0xAA) throw Error("Invalid volume signature!");
         var isFAT16 = sectorBuffer.readUInt16LE(22),        // HACK: get FATSz16 without full decode
             bootStruct = (isFAT16) ? S.boot16 : S.boot32;
         var d = bootStruct.valueFromBytes(sectorBuffer);
         if (!d.BytsPerSec) throw Error("This looks like an ExFAT volume! (unsupported)");
+        setSectorSize(d.BytsPerSec);
         
-        console.log(e,n,d);
+        console.log(d);
         
         var FATSz = (isFAT16) ? d.FATSz16 : d.FATSz32,
             rootDirSectors = Math.ceil((d.RootEntCnt * 32) / d.BytsPerSec),
@@ -60,23 +72,41 @@ exports.createFileSystem = function (volume) {
             fatType = 'fat32';
         }
         
+        // TODO: abort if (TotSec16/32 > DskSz) to e.g. avoid corrupting subsequent partitions!
+        
+        
         console.log("rootDirSectors", rootDirSectors, "firstDataSector", firstDataSector, "countofClusters", countofClusters, "=>", fatType);
         
-        var firstRootDirSecNum = (isFAT16) ? d.ResvdSecCnt + d.NumFATs*d.FATSz16 : findInFAT(d.RootClus);
+        var firstRootDirSecNum = d.ResvdSecCnt + ((isFAT16) ? d.NumFATs*d.FATSz16 : d.RootClus*d.SecPerClus);
         console.log("firstRootDirSecNum", firstRootDirSecNum);
+        
+//        readSector(firstRootDirSecNum, function (e) {
+//            if (e) throw e;
+//            console.log(sectorBuffer);
+//            
+//            var entry = S.dirEntry.valueFromBytes(sectorBuffer);
+//            console.log(entry);
+//        });
+        
         
         // TODO: fetch root directory entry
         // TODO: chase files through (first) FAT
         
-        function findInFAT(n) {
-            // TODO: needs to handle FAT12
-            var scale = 2;
-            var FATOffset = n * scale,
-                ThisFATSecNum = d.ResvdSecCnt + Math.floor(FATOffset / d.BytsPerSec);
-                ThisFATEntOffset = FATOffset % d.BytsPerSec;
+        function fetchFromFAT(clusterNum, cb) {
+            var entryStruct = S.fatField[fatType],
+                FATOffset = Math.floor(clusterNum * entryStruct.size),              // TODO: this is wrong for FAT12!
+                SecNum = d.ResvdSecCnt + Math.floor(FATOffset / d.BytsPerSec);
+                EntOffset = FATOffset % d.BytsPerSec;
+            readFromSectorOffset(SecNum, EntOffset, entryStruct.size, function (e) {
+                if (e) return cb(e);
+                var entry = entryStruct.valueFromBytes(sectorBuffer);
+                if (fatType === 'fat12') entry = entry[clusterNum % 2];
+                else if (fatType === 'fat32') entry &= 0x0FFFFFFF;
+                return entry;
+            });
         }
         
-        d.TotSec16
+        fetchFromFAT(3, function () {});
         
         //d.BytsPerSec
     });
