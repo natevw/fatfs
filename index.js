@@ -142,11 +142,20 @@ exports.createFileSystem = function (volume) {
             return {basis:[basis8,basis3], lossy:lossy};
         }
         
+        var _lnInvalid = /[^a-zA-Z0-9$%'-_@~`!(){}^#&.+,;=[\] ]/g;
+        function longname(name) {
+            name = name.trim().replace(/\.+$/, '').replace(_lnInvalid, function (c) {
+                if (c.length > 1) throw Error("Unexpected match");
+                if (c.charCodeAt(0) > 127) return c;
+                else throw Error("Invalid character "+JSON.stringify(c)+" in name.");
+                lossy = true;
+                return '_';
+            });
+            if (name.length > 255) throw Error("Name is too long.");
+            return name;
+        }
+        
         function findInDirectory(dir_c, name, cb) {
-            
-            
-            
-            
             var s = sectorForCluster(dir_c);
             readSector(s, function (e) {
                 if (e) throw e;
