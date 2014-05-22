@@ -24,6 +24,6 @@
   },
   "homepage": "https://github.com/natevw/fatfs",
   "dependencies": {
-    "struct-fu": "^0.3.0"
+    "struct-fu": "^0.3.1"
   }
 }

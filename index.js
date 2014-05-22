@@ -26,6 +26,11 @@ function tryBoth(d) {
 });
 */
 
+function hex(n, ff) {
+    return (1+ff+n).toString(16).slice(1);
+}
+
+
 exports.createFileSystem = function (volume) {
     var fs = {};
     
@@ -78,15 +83,18 @@ exports.createFileSystem = function (volume) {
 //console.log("rootDirSectors", rootDirSectors, "firstDataSector", firstDataSector, "countofClusters", countofClusters, "=>", fatType);
         
         var firstRootDirSecNum = d.ResvdSecCnt + ((isFAT16) ? d.NumFATs*d.FATSz16 : d.RootClus*d.SecPerClus);
-//console.log("firstRootDirSecNum", firstRootDirSecNum);
         
-//        readSector(firstRootDirSecNum, function (e) {
-//            if (e) throw e;
-//            console.log(sectorBuffer);
-//            
-//            var entry = S.dirEntry.valueFromBytes(sectorBuffer);
-//            console.log(entry);
-//        });
+        readSector(firstRootDirSecNum, function (e) {
+            if (e) throw e;
+            console.log("firstRootDirSecNum", firstRootDirSecNum, sectorBuffer);
+            
+            var off = {bytes:0};
+            while (off.bytes < sectorBuffer.length) {
+                var startBytes = off.bytes,
+                    entry = S.dirEntry.valueFromBytes(sectorBuffer, off);
+                console.log(hex(sectorBuffer[startBytes],0xFF), entry);
+            }
+        });
         
         
         // TODO: fetch root directory entry
@@ -112,24 +120,25 @@ exports.createFileSystem = function (volume) {
             });
         }
         
-        fetchFromFAT(2, function (e,d) {
-            if (e) throw e;
-            else console.log("Next cluster is", d.toString(16));
-            fetchFromFAT(3, function (e,d) {
-                if (e) throw e;
-                else console.log("Next cluster is", d.toString(16));
-                fetchFromFAT(4, function (e,d) {
-                    if (e) throw e;
-                    else console.log("Next cluster is", d.toString(16));
-                });
-            });
-        });
-        
-        //d.BytsPerSec
+//        fetchFromFAT(2, function (e,d) {
+//            if (e) throw e;
+//            else console.log("Next cluster is", d.toString(16));
+//            fetchFromFAT(3, function (e,d) {
+//                if (e) throw e;
+//                else console.log("Next cluster is", d.toString(16));
+//                fetchFromFAT(4, function (e,d) {
+//                    if (e) throw e;
+//                    else console.log("Next cluster is", d.toString(16));
+//                });
+//            });
+//        });
     });
     
     fs.readdir = function (path, cb) {
         var steps = absoluteSteps(path);
+        
+        
+        
         console.log("readdir steps:", steps);
     };
     
