@@ -59,7 +59,7 @@ exports.createFileSystem = function (volume) {
         if (!d.BytsPerSec) throw Error("This looks like an ExFAT volume! (unsupported)");
         setSectorSize(d.BytsPerSec);
         
-//console.log(d);
+console.log(d);
         
         var FATSz = (isFAT16) ? d.FATSz16 : d.FATSz32,
             rootDirSectors = Math.ceil((d.RootEntCnt * 32) / d.BytsPerSec),
@@ -80,9 +80,13 @@ exports.createFileSystem = function (volume) {
         // TODO: abort if (TotSec16/32 > DskSz) to e.g. avoid corrupting subsequent partitions!
         
         
-//console.log("rootDirSectors", rootDirSectors, "firstDataSector", firstDataSector, "countofClusters", countofClusters, "=>", fatType);
+console.log("rootDirSectors", rootDirSectors, "firstDataSector", firstDataSector, "countofClusters", countofClusters, "=>", fatType);
         
-        var firstRootDirSecNum = d.ResvdSecCnt + ((isFAT16) ? d.NumFATs*d.FATSz16 : d.RootClus*d.SecPerClus);
+        var firstRootDirSecNum = (isFAT16) ? firstDataSector - rootDirSectors : sectorForCluster(d.RootClus);
+        
+        function sectorForCluster(n) {
+            return firstDataSector + (n-2)*d.SecPerClus;
+        }
         
         readSector(firstRootDirSecNum, function (e) {
             if (e) throw e;
