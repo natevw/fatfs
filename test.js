@@ -18,9 +18,9 @@ function startTests(imagePath) {
     var fatfs = require("./index.js"),
         vol = require("./img_volume.js").createDriverSync(imagePath),
         fs = fatfs.createFileSystem(vol);
-    fs.readdir("/", function (e,d) {
-        if (e) console.error("Couldn't read directory:", e);
-        else console.log("Root directory contents:", d);
+    fs.readFile("/TEST/FILE.TXT", function (e,d) {
+        if (e) console.error("Couldn't read file:", e);
+        else console.log("File contents:", d);
     });
 }
 

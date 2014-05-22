@@ -59,7 +59,7 @@ exports.createFileSystem = function (volume) {
         if (!d.BytsPerSec) throw Error("This looks like an ExFAT volume! (unsupported)");
         setSectorSize(d.BytsPerSec);
         
-console.log(d);
+//console.log(d);
         
         var FATSz = (isFAT16) ? d.FATSz16 : d.FATSz32,
             rootDirSectors = Math.ceil((d.RootEntCnt * 32) / d.BytsPerSec),
@@ -80,26 +80,13 @@ console.log(d);
         // TODO: abort if (TotSec16/32 > DskSz) to e.g. avoid corrupting subsequent partitions!
         
         
-console.log("rootDirSectors", rootDirSectors, "firstDataSector", firstDataSector, "countofClusters", countofClusters, "=>", fatType);
+//console.log("rootDirSectors", rootDirSectors, "firstDataSector", firstDataSector, "countofClusters", countofClusters, "=>", fatType);
         
-        var firstRootDirSecNum = (isFAT16) ? firstDataSector - rootDirSectors : sectorForCluster(d.RootClus);
+        
         
         function sectorForCluster(n) {
             return firstDataSector + (n-2)*d.SecPerClus;
         }
-        
-        readSector(firstRootDirSecNum, function (e) {
-            if (e) throw e;
-            console.log("firstRootDirSecNum", firstRootDirSecNum, sectorBuffer);
-            
-            var off = {bytes:0};
-            while (off.bytes < sectorBuffer.length) {
-                var startBytes = off.bytes,
-                    entry = S.dirEntry.valueFromBytes(sectorBuffer, off);
-                console.log(hex(sectorBuffer[startBytes],0xFF), entry);
-            }
-        });
-        
         
         // TODO: fetch root directory entry
         // TODO: chase files through (first) FAT
@@ -124,6 +111,68 @@ console.log("rootDirSectors", rootDirSectors, "firstDataSector", firstDataSector
             });
         }
         
+        
+        // TODO: this is a great candidate for special test coverage!
+        var _snInvalid = /[^A-Z0-9$%'-_@~`!(){}^#&.]/g;         // NOTE: '.' is not valid but we split it away
+        function shortname(name) {
+            var lossy = false;
+            name = name.toUpperCase().replace(/ /g, '').replace(/^\.+/, '');
+            name = name.replace(_snInvalid, function () {
+                lossy = true;
+                return '_';
+            });
+            
+            var parts = name.split('.'),
+                basis3 = parts.pop(),
+                basis8 = parts.join('');
+            if (!parts.length) {
+                basis8 = basis3;
+                basis3 = '';
+            }
+            if (basis8.length > 8) {
+                basis8 = basis8.slice(0,8);
+                // NOTE: technically, spec's "lossy conversion" flag is NOT set by excess length.
+                //       But since lossy conversion and truncated names both need a numeric tail…
+                lossy = true;
+            }
+            if (basis3.length > 3) {
+                basis3 = basis3.slice(0,3);
+                lossy = true;
+            }
+            return {basis:[basis8,basis3], lossy:lossy};
+        }
+        
+        function findInDirectory(dir_c, name, cb) {
+            
+            
+            
+            
+            var s = sectorForCluster(dir_c);
+            readSector(s, function (e) {
+                if (e) throw e;
+                
+                var off = {bytes:0};
+                while (off.bytes < sectorBuffer.length) {
+                    var startBytes = off.bytes,
+                        entry = S.dirEntry.valueFromBytes(sectorBuffer, off);
+                    
+                    
+                    console.log(hex(sectorBuffer[startBytes],0xFF), entry);
+                    
+                    
+                }
+            });
+            
+        }
+        
+        fs._sectorForCluster = sectorForCluster;
+        fs._fetchFromFat = fetchFromFat;
+        
+        // NOTE: will be negative (and potentially a non-integer) for FAT12/FAT16!
+        //var firstRootDirSecNum = (isFAT16) ? firstDataSector - rootDirSectors : sectorForCluster(d.RootClus);
+        fs._rootDirCluster = (isFAT16) ? 2 - rootDirSectors / d.SecPerClus : d.RootClus;
+        fs._findInDirectory = findInDirectory;
+        
 //        fetchFromFAT(2, function (e,d) {
 //            if (e) throw e;
 //            else console.log("Next cluster is", d.toString(16));
@@ -140,11 +189,32 @@ console.log("rootDirSectors", rootDirSectors, "firstDataSector", firstDataSector
     
     fs.readdir = function (path, cb) {
         var steps = absoluteSteps(path);
-        
-        
-        
-        console.log("readdir steps:", steps);
+        // TODO: implement
     };
+    fs.readFile = function (path, opts, cb) {
+        if (typeof opts === 'function ') {
+            cb = opts;
+            opts = {};
+        }
+        // TODO: opts.flag, opts.encoding
+        var steps = absoluteSteps(path);
+        console.log("steps to file:", steps);
+        
+        readSector(firstRootDirSecNum, function (e) {
+            if (e) throw e;
+            console.log("firstRootDirSecNum", firstRootDirSecNum, sectorBuffer);
+            
+            var off = {bytes:0};
+            while (off.bytes < sectorBuffer.length) {
+                var startBytes = off.bytes,
+                    entry = S.dirEntry.valueFromBytes(sectorBuffer, off);
+                console.log(hex(sectorBuffer[startBytes],0xFF), entry);
+            }
+        });
+        
+        
+    };
+    
     
     return fs;
 }
