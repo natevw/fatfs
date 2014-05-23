@@ -466,9 +466,16 @@ exports.createFileSystem = function (volume) {
                 entries.slice(1).forEach(function (entry) {
                     entry.Chksum = nameSum;
                 });
-                entries.reverse();
                 
-                console.log("Would write:",entries,d);
+                
+                entries.reverse();
+                var entriesData = new Buffer(S.dirEntry.size*entries.length),
+                    dataOffset = {bytes:0};
+                entries.forEach(function (entry) {
+                    var entryType = ('Ord' in entry) ? S.longDirEntry : S.dirEntry;
+                    entryType.bytesFromValue(entry, entriesData, dataOffset);
+                });
+                console.log("Would write:", entriesData, entriesData.length);
                 cb(new Error("Not implemented!"));
                 
                 // TODO: find an unused spot (or extend) dirChain for entries [name may be taken!]
