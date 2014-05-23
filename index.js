@@ -192,23 +192,26 @@ exports.createFileSystem = function (volume) {
             stats.isSymbolicLink = function () { return false; }
             stats.isFIFO = function () { return false; }
             stats.isSocket = function () { return false; }
-            // TODO:
+            // TODO: more infos!
             stats.atime;
             stats.mtime;
             stats.ctime;
             stats._firstCluster = (dirEntry.FstClusHI << 16) + dirEntry.FstClusLO
+            stats._dbgOrig = dirEntry;
             return stats;
         }
         
         function findInDirectory(dir_c, name, cb) {
+            name = name.toUpperCase();
             var long = null,        // gathers {name,sum} for long filenames (potentially across sectors)
                 s = sectorForCluster(dir_c),
                 count = (dir_c > 0) ? d.SecPerClus : rootDirSectors;
+console.log("Looking in sector", s, "- via cluster", dir_c, "- for", name);
             processSector(s, count, dir_c);
             
             function processSector(s, sRemaining, c) {
                 readSector(s, function (e) {
-                    if (e) throw e;
+                    if (e) cb(S.err.IO());
                     
                     var off = {bytes:0};
                     while (off.bytes < sectorBuffer.length) {
@@ -223,6 +226,7 @@ exports.createFileSystem = function (volume) {
                         var attrByte = sectorBuffer[entryIdx+11],
                             entryType = (attrByte === S.longDirFlag) ? S.longDirEntry : S.dirEntry;
                         var entry = entryType.valueFromBytes(sectorBuffer, off);
+//console.log("entry:", entry);
                         if (entryType === S.longDirEntry) {
                             var firstEntry;
                             if (entry.Ord & 0x40) {
@@ -236,32 +240,39 @@ exports.createFileSystem = function (volume) {
                                 }
                             }
                             if (firstEntry || long && entry.Chksum === long.sum && entry.Ord === long._rem--) {
-                                var name = entry.Name1;
+                                var namepart = entry.Name1;
                                 if (entry.Name1.length === 5) {
-                                    name += entry.Name2;
+                                    namepart += entry.Name2;
                                     if (entry.Name2.length === 6) {
-                                        name += entry.Name3;
+                                        namepart += entry.Name3;
                                     }
                                 }
-                                long._arr.push(name);
+                                long._arr.push(namepart);
                                 if (!long._rem) {
                                     long.name = long._arr.reverse().join('');
                                     delete long._arr;
                                     delete long._rem;
                                 }
                             } else long = null;
-                        } else {
-                            var longName = null;
+                        } else if (!entry.Attr.volume_id) {
+                            var bestName = null;
                             if (long && long.name) {
                                 var sum = reduceBuffer(sectorBuffer, entryIdx, entryIdx+11, nameChkSum);
-                                if (sum === long.sum) longName = long.name;
+                                if (sum === long.sum) bestName = long.name;
                             }
-                            if (signalByte === 0x05) entry.Name.filename = '\u00EF'+entry.Name.filename.slice(1);
+                            if (!bestName) {
+                                if (signalByte === 0x05) entry.Name.filename = '\u00EF'+entry.Name.filename.slice(1);
+                                
+                                var nam = entry.Name.filename.replace(/ +$/, ''),
+                                    ext = entry.Name.extension.replace(/ +$/, '');
+                                bestName = (ext) ? nam+'.'+ext : nam;
+                            }
                             
-                            console.log(hex(sectorBuffer[entryIdx],0xFF), entry.Name, longName);
-                            if ((longName || entry.Name) === name) return cb(null, makeStat(entry));
+                            // TODO: filter out volume entries
+                            console.log(hex(sectorBuffer[entryIdx],0xFF), entry.Name, bestName);
+                            if (bestName.toUpperCase() === name) return cb(null, makeStat(entry));
                             long = null;
-                        }
+                        } else long = null;
                     }
                     if (off.bytes >= sectorBuffer.length) {
                         if (sRemaining) processSector(s+1, sRemaining-1, c);
@@ -287,19 +298,6 @@ exports.createFileSystem = function (volume) {
         //var firstRootDirSecNum = (isFAT16) ? firstDataSector - rootDirSectors : sectorForCluster(d.RootClus);
         fs._rootDirCluster = (isFAT16) ? 2 - rootDirSectors / d.SecPerClus : d.RootClus;
         fs._findInDirectory = findInDirectory;
-        
-//        fetchFromFAT(2, function (e,d) {
-//            if (e) throw e;
-//            else console.log("Next cluster is", d.toString(16));
-//            fetchFromFAT(3, function (e,d) {
-//                if (e) throw e;
-//                else console.log("Next cluster is", d.toString(16));
-//                fetchFromFAT(4, function (e,d) {
-//                    if (e) throw e;
-//                    else console.log("Next cluster is", d.toString(16));
-//                });
-//            });
-//        });
     });
     
     fs.readdir = function (path, cb) {
@@ -319,7 +317,7 @@ exports.createFileSystem = function (volume) {
             fs._findInDirectory(cluster, name, function (e,d) {
                 if (e) cb(e);
                 else if (spets.length) findNext(d._firstCluster);
-                else cb(null, d);
+                else cb(null, d.isFile());
             });
         }
         findNext(fs._rootDirCluster);
