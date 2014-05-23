@@ -130,7 +130,7 @@ exports.fatField = {
 var _errors = {
     IO: "Input/output error",
     NOENT: "No such file or directory",
-    
+    INVAL: "Invalid argument"
 };
 
 exports.err = {};

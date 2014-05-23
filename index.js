@@ -95,7 +95,9 @@ exports.createFileSystem = function (volume) {
     }
     function readSector(secNum, cb) {
         var secSize = sectorBuffer.length;
-        volume.read(sectorBuffer, 0, secSize, secNum*secSize, cb);
+        volume.read(sectorBuffer, 0, secSize, secNum*secSize, function (e) {
+            cb(e, sectorBuffer);
+        });
     }
     function readFromSectorOffset(secNum, offset, len, cb) {
         var secSize = sectorBuffer.length;
@@ -201,17 +203,13 @@ exports.createFileSystem = function (volume) {
             return stats;
         }
         
-        function findInDirectory(dir_c, name, cb) {
+        function findInDirectory(dirChain, name, cb) {
             name = name.toUpperCase();
-            var long = null,        // gathers {name,sum} for long filenames (potentially across sectors)
-                s = sectorForCluster(dir_c),
-                count = (dir_c > 0) ? D.SecPerClus : rootDirSectors;
-console.log("Looking in sector", s, "- via cluster", dir_c, "- for", name);
-            processSector(s, count, dir_c);
-            
-            function processSector(s, sRemaining, c) {
-                readSector(s, function (e) {
-                    if (e) cb(S.err.IO());
+            var long = null;        // gathers {name,sum} for long filenames (potentially across sectors)
+            function processSector(idx) {
+                dirChain.readSector(idx, function (e, sectorBuffer) {
+                    if (e) return cb(S.err.IO());
+                    else if (!sectorBuffer) return cb(S.err.NOENT());
                     
                     var off = {bytes:0};
                     while (off.bytes < sectorBuffer.length) {
@@ -274,23 +272,59 @@ console.log("Looking in sector", s, "- via cluster", dir_c, "- for", name);
                             long = null;
                         } else long = null;
                     }
-                    if (off.bytes >= sectorBuffer.length) {
-                        if (sRemaining) processSector(s+1, sRemaining-1, c);
-                        else if (c) fetchFromFAT(c, function (e,nextCluster) {
-                            if (e) cb(e);
-                            else if (typeof nextCluster === 'number') {
-                                var s = sectorForCluster(nextCluster);
-                                processSector(s, D.SecPerClus, nextCluster);
-                            } else {
-                                console.log("Current cluster was", nextCluster);
-                                cb(S.err.NOENT());
-                            }
-                        });
-                    } else cb(S.err.NOENT());
+                    if (off.bytes >= sectorBuffer.length) processSector(idx+1);
                 });
             }
+            processSector(0);
         }
         
+        function openClusterChain(firstCluster, opts, cb) {
+            var chain = {},
+                cache = [firstCluster];
+            
+            function extendCacheToInclude(i, cb) {          // NOTE: may `cb()` before returning!
+                if (i < cache.length) cb(null, cache[i]);
+                else if (cache[cache.length-1] === 'eof') cb(null, 'eof');
+                else fetchFromFAT(cache[cache.length-1], function (e,d) {
+                    if (e) cb(e);
+                    else if (typeof d === 'string' && d !== 'eof') cb(S.err.IO());
+                    else {
+                        cache.push(d);
+                        extendCacheToInclude(i, cb);
+                    }
+                });
+            }
+            
+            function sectorForClusterAtIdx(i, cb) {
+                extendCacheToInclude(i, function (e,c) {
+                    if (e) cb(e);
+                    else cb(null, sectorForCluster(c));
+                });
+            }
+            
+            function _noData(cb) {
+                process.nextTick(cb.bind(null, null, null));
+            }
+            
+            chain.readSector = (firstCluster > 0) ? function (i, cb) {
+                var o = i % D.SecPerClus,
+                    c = (i - o) / D.SecPerClus;
+                sectorForClusterAtIdx(c, function (e,s) {
+                    if (e) cb(e);
+                    else if (s) readSector(s+o, cb);
+                    else _noData(cb);
+                });
+            } : function (i, cb) {
+                var s = firstDataSector - rootDirSectors;
+                if (i < rootDirSectors) readSector(s+i, cb);
+                else _noData(cb);
+            };
+            
+            return chain;
+        }
+        
+        
+        fs._openClusterChain = openClusterChain;
         fs._sectorForCluster = sectorForCluster;
         fs._fetchFromFAT = fetchFromFAT;
         
@@ -312,9 +346,10 @@ console.log("Looking in sector", s, "- via cluster", dir_c, "- for", name);
         // TODO: opts.flag, opts.encoding
         var spets = absoluteSteps(path).reverse();
         function findNext(cluster) {
-            var name = spets.pop();
+            var name = spets.pop(),
+                chain = fs._openClusterChain(cluster);
             console.log("Looking for:", name);
-            fs._findInDirectory(cluster, name, function (e,d) {
+            fs._findInDirectory(chain, name, function (e,d) {
                 if (e) cb(e);
                 else if (spets.length) findNext(d._firstCluster);
                 else cb(null, d);
