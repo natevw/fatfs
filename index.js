@@ -225,6 +225,7 @@ exports.createFileSystem = function (volume) {
                             off.bytes += S.dirEntry.size;
                             continue;
                         }
+                        // TODO: also ignore entries with anything 'reserved' set!
                         
                         var attrByte = sectorBuffer[entryIdx+11],
                             entryType = (attrByte === S.longDirFlag) ? S.longDirEntry : S.dirEntry;
@@ -329,6 +330,11 @@ exports.createFileSystem = function (volume) {
         }
         
         function addFile(dirChain, name, cb) {
+            var entries = [];
+            // TODO: make long+short entries
+            // TODO: find an unused spot (or extend) dirChain for entries [name may be taken!]
+            // TODO: what about initial settings? [FstClus can be 0, IIRC]
+            
             // TODO: implement
             cb(new Error("Not implemented!"));
         }
