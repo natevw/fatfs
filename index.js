@@ -225,7 +225,8 @@ exports.createFileSystem = function (volume) {
             processNext(directoryIterator(dirChain));
         }
         
-        function directoryIterator(dirChain) {
+        function directoryIterator(dirChain, opts) {
+            opts || (opts = {});
             var _cachedBuf = null;
             function getSectorBuffer(n, cb) {
                 if (_cachedBuf && n === _cachedBuf._n) cb(null, _cachedBuf);
@@ -247,18 +248,19 @@ exports.createFileSystem = function (volume) {
                     secIdx += 1;
                     off.bytes -= getSectorSize();
                 }
+                var entryNum = (secIdx*getSectorSize() + off.bytes) / S.dirEntry.size;
                 getSectorBuffer(secIdx, function (e, sectorBuffer) {
                     if (e) return cb(S.err.IO());
-                    else if (!sectorBuffer) return cb(null, null);
+                    else if (!sectorBuffer) return cb(null, null, entryNum);
                     
                     var entryIdx = off.bytes,
                         signalByte = sectorBuffer[entryIdx];
-                    if (signalByte === S.entryDoneFlag) return cb(null, null);
+                    if (signalByte === S.entryDoneFlag) return cb(null, null, entryNum);
                     else if (signalByte === S.entryFreeFlag) {
-                        // skip free entries
                         off.bytes += S.dirEntry.size;
                         long = null;
-                        return getNextEntry(cb);
+                        if (opts.includeFree) return cb(null, {_free:true}, entryNum);
+                        else return getNextEntry(cb);       // usually just skip these
                     }
                     
                     var attrByte = sectorBuffer[entryIdx+S.dirEntry.fields.Attr.offset],
@@ -312,7 +314,7 @@ exports.createFileSystem = function (volume) {
                         }
                         entry._name = bestName;
                         long = null;
-                        return cb(null, entry);
+                        return cb(null, entry, entryNum);
                     } else long = null;
                     getNextEntry(cb);
                 });
@@ -393,7 +395,6 @@ exports.createFileSystem = function (volume) {
                 FstClusLO: 0,
                 FileSize: 0
             });
-console.log("short?", short);
             if (1 || short.lossy) {         // HACK: always write long names until short.lossy more useful!
                 // name entries should be 0x0000-terminated and 0xFFFF-filled
                 var S_lde_f = S.longDirEntry.fields,
@@ -420,12 +421,13 @@ console.log("short?", short);
             function prepareForEntries(cb) {
                 var matchName = name.toUpperCase(),
                     tailName = entries[0].Name,
-                    maxTail = 0, nFreeAt = null;
+                    maxTail = 0;
                 function processNext(next) {
                     // TODO: we also need to locate home for `entries`…!
-                    next = next(function (e, d) {
+                    next = next(function (e, d, entryNum) {
                         if (e) cb(e);
-                        else if (!d) cb(null, {tail:maxTail+1, home:nFreeAt});
+                        else if (!d) cb(null, {tail:maxTail+1, home:entryNum});
+                        else if (d._free) ;         // TODO: look for long enough reusable run
                         else if (d._name.toUpperCase() === matchName) return cb(S.err.EXIST());
                         else {
                             var dNum = 1,
@@ -444,7 +446,7 @@ console.log("short?", short);
                         }
                     });
                 }
-                processNext(directoryIterator(dirChain));
+                processNext(directoryIterator(dirChain, {includeFree:true}));
             }
             
             prepareForEntries(function (e, d) {
@@ -466,7 +468,7 @@ console.log("short?", short);
                 });
                 entries.reverse();
                 
-                console.log("Would write:",entries);
+                console.log("Would write:",entries,d);
                 cb(new Error("Not implemented!"));
                 
                 // TODO: find an unused spot (or extend) dirChain for entries [name may be taken!]
