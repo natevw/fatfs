@@ -4,6 +4,7 @@ var S = require("./structs.js");
 var _snInvalid = /[^A-Z0-9$%'-_@~`!(){}^#&.]/g;         // NOTE: '.' is not valid but we split it away
 function shortname(name) {
     var lossy = false;
+    // TODO: support preservation of case for otherwise non-lossy name!
     name = name.toUpperCase().replace(/ /g, '').replace(/^\.+/, '');
     name = name.replace(_snInvalid, function () {
         lossy = true;
@@ -15,18 +16,18 @@ function shortname(name) {
         basis8 = parts.join('');
     if (!parts.length) {
         basis8 = basis3;
-        basis3 = '';
+        basis3 = '   ';
     }
     if (basis8.length > 8) {
         basis8 = basis8.slice(0,8);
         // NOTE: technically, spec's "lossy conversion" flag is NOT set by excess length.
         //       But since lossy conversion and truncated names both need a numeric tail…
         lossy = true;
-    }
+    } else while (basis8.length < 8) basis8 += ' ';
     if (basis3.length > 3) {
         basis3 = basis3.slice(0,3);
         lossy = true;
-    }
+    } else while (basis3.length < 3) basis3 += ' ';
     return {basis:[basis8,basis3], lossy:lossy};
 }
 //shortname("autoexec.bat") => {basis:['AUTOEXEC','BAT'],lossy:false}
@@ -220,12 +221,12 @@ exports.createFileSystem = function (volume) {
                     while (off.bytes < sectorBuffer.length) {
                         var entryIdx = off.bytes,
                             signalByte = sectorBuffer[entryIdx];
-                        if (!signalByte) break;         // no more entries
-                        else if (signalByte === 0xE5) { // free entry, skip
+                        if (signalByte === S.entryDoneFlag) break;
+                        else if (signalByte === S.entryFreeFlag || signalByte & S.entryReserved) {
+                            // skip free/reserved entries
                             off.bytes += S.dirEntry.size;
                             continue;
                         }
-                        // TODO: also ignore entries with anything 'reserved' set!
                         
                         var attrByte = sectorBuffer[entryIdx+11],
                             entryType = (attrByte === S.longDirFlag) ? S.longDirEntry : S.dirEntry;
@@ -233,9 +234,9 @@ exports.createFileSystem = function (volume) {
 //console.log("entry:", entry);
                         if (entryType === S.longDirEntry) {
                             var firstEntry;
-                            if (entry.Ord & 0x40) {
+                            if (entry.Ord & S.lastLongFlag) {
                                 firstEntry = true;
-                                entry.Ord &= ~0x40;
+                                entry.Ord &= ~S.lastLongFlag;
                                 long = {
                                     name: null,
                                     sum: entry.Chksum,
@@ -269,6 +270,8 @@ exports.createFileSystem = function (volume) {
                                 
                                 var nam = entry.Name.filename.replace(/ +$/, ''),
                                     ext = entry.Name.extension.replace(/ +$/, '');
+                                // TODO: lowercase bits http://en.wikipedia.org/wiki/8.3_filename#Compatibility
+                                //       via NTRes, bits 0x08 and 0x10 http://www.fdos.org/kernel/fatplus.txt.1
                                 bestName = (ext) ? nam+'.'+ext : nam;
                             }
                             
@@ -336,15 +339,49 @@ exports.createFileSystem = function (volume) {
             };
             
             //chain.writeSector
-            //chain.addSector
-            //chain.truncate
-            
+            //chain.addSectors
+            //chain.removeSectors
             
             return chain;
         }
         
         function addFile(dirChain, name, cb) {
-            var entries = [];
+            var entries = [],
+                short = shortname(name);
+            entries.push({
+                // TODO: numeric tail generation
+                Name: {filename:short.basis[0], extension:short.basis[1]},
+                Attr: {directory:false},
+                FstClusHI: 0,
+                FstClusLO: 0,
+                FileSize: 0
+            });
+console.log("short?", short);
+            if (1 || short.lossy) {         // HACK: always write long names until short.lossy more useful!
+                // name entries should be 0x0000-terminated and 0xFFFF-filled
+                var ENTRY_CHUNK_LEN = 13,
+                    partialLen = name.length % ENTRY_CHUNK_LEN,
+                    paddingNeeded = partialLen && (ENTRY_CHUNK_LEN - partialLen);
+                if (paddingNeeded--) name += '\u0000';
+                while (paddingNeeded-- > 0) name += '\uFFFF';
+                // now fill in as many entries as it takes
+                var off = 0,
+                    ord = 1;
+                while (off < name.length) entries.push({
+                    Ord: ord++,
+                    Name1: name.slice(off, off+=5),
+                    Attr: S.longDirFlag,
+                    Chksum: null,           // TODO: this must
+                    Name2: name.slice(off, off+=6),
+                    Name3: name.slice(off, off+=2)
+                });
+                entries[entries.length - 1].Ord &= S.lastLongFlag;
+            }
+            entries.reverse();
+            
+console.log("prelim entries are:", entries);
+            
+            
             // TODO: make long+short entries
             // TODO: find an unused spot (or extend) dirChain for entries [name may be taken!]
             // TODO: what about initial settings? [FstClus can be 0, IIRC]
@@ -353,23 +390,13 @@ exports.createFileSystem = function (volume) {
             cb(new Error("Not implemented!"));
         }
         
-        function chainForPath(path, opts, cb) {
-            if (typeof opts === 'function') {
-                cb = opts;
-                opts = {};
-            }
+        function chainForPath(path, cb) {
             var spets = absoluteSteps(path).reverse();
             function findNext(chain) {
-                var name = spets.pop(),
-                    mayCreate = (!spets.length && opts.createFile) ? 'file' : null;
-console.log("findNext", spets, opts, mayCreate);
+                var name = spets.pop();
                 console.log("Looking for:", name);
                 findInDirectory(chain, name, function (e,stats) {
-                    if (mayCreate && e.code === 'NOENT') addFile(chain, name, function (e,file) {
-                        if (e) cb(e);
-                        else findNext(file._firstCluster);
-                    });
-                    else if (e) cb(e);
+                    if (e) cb(e, spets.concat(name), chain);
                     else {
                         var chain = openClusterChain(stats._firstCluster);
                         if (spets.length) findNext(chain);
@@ -384,6 +411,7 @@ console.log("findNext", spets, opts, mayCreate);
         }
         
         fs._chainForPath = chainForPath;
+        fs._addFile = addFile;
     });
     
     fs.readdir = function (path, cb) {
@@ -425,12 +453,20 @@ console.log("have chain for file:", path, stats);
         }
         // TODO: opts.flag (/opts.mode for readonly?)
         if (typeof data === 'string') data = Buffer(data, opts.encoding);
-        fs._chainForPath(path, {createFile:true}, function (e,stats,chain) {
-            if (e) cb(e);
-            // TODO: implement!
+        fs._chainForPath(path, function (e,stats,chain) {
+            // TODO: finish implementing!
+            if (e && e.code !== 'NOENT') cb(e);
+            else if (e) {
+                if (stats.length !== 1) cb(e);
+                else fs._addFile(chain, stats[0], function (e,d) {
+                    if (e) return cb(e);
+                    else ;      // TODO: what?
+                });
+            }
+            else {
+                // TODO: write file
+            }
         });
-        
-        
     };
     
     
