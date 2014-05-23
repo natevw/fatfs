@@ -255,8 +255,8 @@ console.log("READING sector", secIdx, "at byte", off);
                     var entryIdx = off.bytes,
                         signalByte = sectorBuffer[entryIdx];
                     if (signalByte === S.entryDoneFlag) return cb(null, null);
-                    else if (signalByte === S.entryFreeFlag || signalByte & S.entryReserved) {
-                        // skip free/reserved entries
+                    else if (signalByte === S.entryFreeFlag) {
+                        // skip free entries
                         off.bytes += S.dirEntry.size;
                         long = null;
                         return getNextEntry(cb);

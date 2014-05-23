@@ -94,7 +94,6 @@ exports.dirEntry = _.struct([
 ]);
 exports.entryDoneFlag = 0x00;
 exports.entryFreeFlag = 0xE5;
-exports.entryReserved = 0x03;
 
 exports.lastLongFlag = 0x40;
 exports.longDirFlag = 0x0F;
