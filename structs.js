@@ -93,6 +93,21 @@ exports.dirEntry = _.struct([
     _.uint32le('FileSize')
 ]);
 
+
+exports.longDirFlag = 0x0F;
+exports.longDirEntry = _.struct([
+    _.uint8('Ord'),
+    _.char16('Name1', 5),            // NOTE: byte instead of char for UTF16
+    _.uint8('Attr'),
+    _.uint8('Type'),
+    _.uint8('Chksum'),
+    _.char16('Name2', 6),
+    _.uint16le('FstClusLO'),
+    _.char16('Name3', 2)
+]);
+
+if (exports.longDirEntry.size !== exports.dirEntry.size) throw Error("Structs ain't right!");
+
 exports.fatField = {
     'fat12': _.struct([
         _.ubit('NextCluster0bc', 8),

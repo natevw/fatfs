@@ -1,12 +1,67 @@
 var S = require("./structs.js");
 
+// TODO: these are great candidates for special test coverage!
+var _snInvalid = /[^A-Z0-9$%'-_@~`!(){}^#&.]/g;         // NOTE: '.' is not valid but we split it away
+function shortname(name) {
+    var lossy = false;
+    name = name.toUpperCase().replace(/ /g, '').replace(/^\.+/, '');
+    name = name.replace(_snInvalid, function () {
+        lossy = true;
+        return '_';
+    });
+    
+    var parts = name.split('.'),
+        basis3 = parts.pop(),
+        basis8 = parts.join('');
+    if (!parts.length) {
+        basis8 = basis3;
+        basis3 = '';
+    }
+    if (basis8.length > 8) {
+        basis8 = basis8.slice(0,8);
+        // NOTE: technically, spec's "lossy conversion" flag is NOT set by excess length.
+        //       But since lossy conversion and truncated names both need a numeric tail…
+        lossy = true;
+    }
+    if (basis3.length > 3) {
+        basis3 = basis3.slice(0,3);
+        lossy = true;
+    }
+    return {basis:[basis8,basis3], lossy:lossy};
+}
+//shortname("autoexec.bat") => {basis:['AUTOEXEC','BAT'],lossy:false}
+//shortname("autoexecutable.batch") => {basis:['AUTOEXEC','BAT'],lossy:true}
+// TODO: OS X stores `shortname("._.Trashes")` as ['~1', 'TRA'] — should we?
+
+var _lnInvalid = /[^a-zA-Z0-9$%'-_@~`!(){}^#&.+,;=[\] ]/g;
+function longname(name) {
+    name = name.trim().replace(/\.+$/, '').replace(_lnInvalid, function (c) {
+        if (c.length > 1) throw Error("Internal problem: unexpected match length!");
+        if (c.charCodeAt(0) > 127) return c;
+        else throw Error("Invalid character "+JSON.stringify(c)+" in name.");
+        lossy = true;
+        return '_';
+    });
+    if (name.length > 255) throw Error("Name is too long.");
+    return name;
+}
+
 function absoluteSteps(path) {
     var steps = [];
     path.split('/').forEach(function (str) {
         if (str === '..') steps.pop();
         else if (str && str !== '.') steps.push(str);
     });
-    return steps;
+    return steps.map(longname);
+}
+
+// WORKAROUND: https://github.com/tessel/beta/issues/335
+function reduceBuffer(buf, start, end, fn, res) {
+    // NOTE: does not handle missing `res` like Array.prototype.reduce would
+    for (var i = start; i < end; ++i) {
+        res = fn(res, buf[i]);
+    }
+    return res;
 }
 
 /* comparing C rounding trick from FAT spec with Math.ceil
@@ -79,17 +134,11 @@ exports.createFileSystem = function (volume) {
         
         // TODO: abort if (TotSec16/32 > DskSz) to e.g. avoid corrupting subsequent partitions!
         
-        
 //console.log("rootDirSectors", rootDirSectors, "firstDataSector", firstDataSector, "countofClusters", countofClusters, "=>", fatType);
-        
-        
         
         function sectorForCluster(n) {
             return firstDataSector + (n-2)*d.SecPerClus;
         }
-        
-        // TODO: fetch root directory entry
-        // TODO: chase files through (first) FAT
         
         function fetchFromFAT(clusterNum, cb) {
             var entryStruct = S.fatField[fatType],
@@ -111,48 +160,8 @@ exports.createFileSystem = function (volume) {
             });
         }
         
-        
-        // TODO: this is a great candidate for special test coverage!
-        var _snInvalid = /[^A-Z0-9$%'-_@~`!(){}^#&.]/g;         // NOTE: '.' is not valid but we split it away
-        function shortname(name) {
-            var lossy = false;
-            name = name.toUpperCase().replace(/ /g, '').replace(/^\.+/, '');
-            name = name.replace(_snInvalid, function () {
-                lossy = true;
-                return '_';
-            });
-            
-            var parts = name.split('.'),
-                basis3 = parts.pop(),
-                basis8 = parts.join('');
-            if (!parts.length) {
-                basis8 = basis3;
-                basis3 = '';
-            }
-            if (basis8.length > 8) {
-                basis8 = basis8.slice(0,8);
-                // NOTE: technically, spec's "lossy conversion" flag is NOT set by excess length.
-                //       But since lossy conversion and truncated names both need a numeric tail…
-                lossy = true;
-            }
-            if (basis3.length > 3) {
-                basis3 = basis3.slice(0,3);
-                lossy = true;
-            }
-            return {basis:[basis8,basis3], lossy:lossy};
-        }
-        
-        var _lnInvalid = /[^a-zA-Z0-9$%'-_@~`!(){}^#&.+,;=[\] ]/g;
-        function longname(name) {
-            name = name.trim().replace(/\.+$/, '').replace(_lnInvalid, function (c) {
-                if (c.length > 1) throw Error("Unexpected match");
-                if (c.charCodeAt(0) > 127) return c;
-                else throw Error("Invalid character "+JSON.stringify(c)+" in name.");
-                lossy = true;
-                return '_';
-            });
-            if (name.length > 255) throw Error("Name is too long.");
-            return name;
+        function nameChkSum(sum, c) {
+            return ((sum & 1) ? 0x80 : 0) + (sum >>> 1) + c & 0xFF;
         }
         
         function findInDirectory(dir_c, name, cb) {
@@ -160,22 +169,65 @@ exports.createFileSystem = function (volume) {
             readSector(s, function (e) {
                 if (e) throw e;
                 
-                var off = {bytes:0};
+                var off = {bytes:0},
+                    long = null;        // {name,sum}
                 while (off.bytes < sectorBuffer.length) {
-                    var startBytes = off.bytes,
-                        entry = S.dirEntry.valueFromBytes(sectorBuffer, off);
+                    var entryIdx = off.bytes,
+                        signalByte = sectorBuffer[entryIdx];
+                    if (!signalByte) break;         // no more entries
+                    else if (signalByte === 0xE5) { // free entry, skip
+                        off.bytes += S.dirEntry.size;
+                        continue;
+                    }
                     
-                    
-                    console.log(hex(sectorBuffer[startBytes],0xFF), entry);
-                    
-                    
+                    var attrByte = sectorBuffer[entryIdx+11],
+                        entryType = (attrByte === S.longDirFlag) ? S.longDirEntry : S.dirEntry;
+                    var entry = entryType.valueFromBytes(sectorBuffer, off);
+                    if (entryType === S.longDirEntry) {
+                        var firstEntry;
+                        if (entry.Ord & 0x40) {
+                            firstEntry = true;
+                            entry.Ord &= ~0x40;
+                            long = {
+                                name: null,
+                                sum: entry.Chksum,
+                                _rem: entry.Ord,
+                                _arr: []
+                            }
+                        }
+                        if (firstEntry || long && entry.Chksum === long.sum && entry.Ord === long._rem--) {
+                            var name = entry.Name1;
+                            if (entry.Name1.length === 5) {
+                                name += entry.Name2;
+                                if (entry.Name2.length === 6) {
+                                    name += entry.Name3;
+                                }
+                            }
+                            long._arr.push(name);
+                            if (!long._rem) {
+                                long.name = long._arr.reverse().join('');
+                                delete long._arr;
+                                delete long._rem;
+                            }
+                        } else long = null;
+                    } else {
+                        var longName;
+                        if (long && long.name) {
+                            var sum = reduceBuffer(sectorBuffer, entryIdx, entryIdx+11, nameChkSum);
+                            if (sum === long.sum) longName = long.name;
+                        }
+                        if (signalByte === 0x05) entry.Name.filename = '\u00EF'+entry.Name.filename.slice(1);
+                        
+                        console.log(hex(sectorBuffer[entryIdx],0xFF), entry.Name, longName);
+                        long = null;
+                    }
                 }
             });
             
         }
         
         fs._sectorForCluster = sectorForCluster;
-        fs._fetchFromFat = fetchFromFat;
+        fs._fetchFromFAT = fetchFromFAT;
         
         // NOTE: will be negative (and potentially a non-integer) for FAT12/FAT16!
         //var firstRootDirSecNum = (isFAT16) ? firstDataSector - rootDirSectors : sectorForCluster(d.RootClus);
@@ -208,20 +260,10 @@ exports.createFileSystem = function (volume) {
         // TODO: opts.flag, opts.encoding
         var steps = absoluteSteps(path);
         console.log("steps to file:", steps);
-        
-        readSector(firstRootDirSecNum, function (e) {
-            if (e) throw e;
-            console.log("firstRootDirSecNum", firstRootDirSecNum, sectorBuffer);
-            
-            var off = {bytes:0};
-            while (off.bytes < sectorBuffer.length) {
-                var startBytes = off.bytes,
-                    entry = S.dirEntry.valueFromBytes(sectorBuffer, off);
-                console.log(hex(sectorBuffer[startBytes],0xFF), entry);
-            }
+        fs._findInDirectory(fs._rootDirCluster, steps[0], function (e,d) {
+            if (e) console.error("Couldn't find", steps[0], "in root directory");
+            else console.log(d);
         });
-        
-        
     };
     
     
