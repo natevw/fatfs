@@ -248,18 +248,18 @@ exports.createFileSystem = function (volume) {
                     secIdx += 1;
                     off.bytes -= getSectorSize();
                 }
-                var entryNum = (secIdx*getSectorSize() + off.bytes) / S.dirEntry.size;
+                var entryPos = secIdx*getSectorSize() + off.bytes;
                 getSectorBuffer(secIdx, function (e, sectorBuffer) {
                     if (e) return cb(S.err.IO());
-                    else if (!sectorBuffer) return cb(null, null, entryNum);
+                    else if (!sectorBuffer) return cb(null, null, entryPos);
                     
                     var entryIdx = off.bytes,
                         signalByte = sectorBuffer[entryIdx];
-                    if (signalByte === S.entryDoneFlag) return cb(null, null, entryNum);
+                    if (signalByte === S.entryDoneFlag) return cb(null, null, entryPos);
                     else if (signalByte === S.entryFreeFlag) {
                         off.bytes += S.dirEntry.size;
                         long = null;
-                        if (opts.includeFree) return cb(null, {_free:true}, entryNum);
+                        if (opts.includeFree) return cb(null, {_free:true}, entryPos);
                         else return getNextEntry(cb);       // usually just skip these
                     }
                     
@@ -314,7 +314,7 @@ exports.createFileSystem = function (volume) {
                         }
                         entry._name = bestName;
                         long = null;
-                        return cb(null, entry, entryNum);
+                        return cb(null, entry, entryPos);
                     } else long = null;
                     getNextEntry(cb);
                 });
@@ -423,10 +423,9 @@ exports.createFileSystem = function (volume) {
                     tailName = entries[0].Name,
                     maxTail = 0;
                 function processNext(next) {
-                    // TODO: we also need to locate home for `entries`…!
-                    next = next(function (e, d, entryNum) {
+                    next = next(function (e, d, entryPos) {
                         if (e) cb(e);
-                        else if (!d) cb(null, {tail:maxTail+1, home:entryNum});
+                        else if (!d) cb(null, {tail:maxTail+1, home:entryPos});
                         else if (d._free) ;         // TODO: look for long enough reusable run
                         else if (d._name.toUpperCase() === matchName) return cb(S.err.EXIST());
                         else {
@@ -458,7 +457,7 @@ exports.createFileSystem = function (volume) {
                         sufIdx = Math.min(name.indexOf(' '), name.length-suffix.length);
                     if (sufIdx < 0) return cb(S.err.NAMETOOLONG());         // TODO: would EXIST be more correct?
                     entries[0].Name.filename = name.slice(0,sufIdx)+suffix+name.slice(sufIdx+suffix.length);
-                    console.log("SHORTNAME now", entries[0].Name);
+                    console.log("Shortname amended to:", entries[0].Name);
                 }
                 
                 var nameBuf = S.dirEntry.fields['Name'].bytesFromValue(entries[0].Name),
@@ -475,11 +474,9 @@ exports.createFileSystem = function (volume) {
                     var entryType = ('Ord' in entry) ? S.longDirEntry : S.dirEntry;
                     entryType.bytesFromValue(entry, entriesData, dataOffset);
                 });
-                console.log("Would write:", entriesData, entriesData.length);
+                console.log("WOULD WRITE:", entriesData.length, "byte directory entry", d.home, "bytes into", dirChain);
+                // TODO: using general writing mechanism, append entriesData to dirChain
                 cb(new Error("Not implemented!"));
-                
-                // TODO: find an unused spot (or extend) dirChain for entries [name may be taken!]
-                // TODO: finalize short name and apply CRC to long entries
             });
         }
         
