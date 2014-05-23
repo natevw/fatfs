@@ -94,14 +94,17 @@ exports.createFileSystem = function (volume) {
     function setSectorSize(len) {
         if (!sectorBuffer || sectorBuffer.length !== len) sectorBuffer = new Buffer(len);
     }
+    function getSectorSize() {
+        return sectorBuffer.length;
+    }
     function readSector(secNum, cb) {
-        var secSize = sectorBuffer.length;
+        var secSize = getSectorSize();
         volume.read(sectorBuffer, 0, secSize, secNum*secSize, function (e) {
             cb(e, sectorBuffer);
         });
     }
     function readFromSectorOffset(secNum, offset, len, cb) {
-        var secSize = sectorBuffer.length;
+        var secSize = getSectorSize();
         volume.read(sectorBuffer, 0, len, secNum*secSize+offset, cb);
     }
     
@@ -211,82 +214,114 @@ exports.createFileSystem = function (volume) {
         
         function findInDirectory(dirChain, name, cb) {
             name = name.toUpperCase();
-            var long = null;        // gathers {name,sum} for long filenames (potentially across sectors)
-            function processSector(idx) {
-                dirChain.readSector(idx, function (e, sectorBuffer) {
-                    if (e) return cb(S.err.IO());
-                    else if (!sectorBuffer) return cb(S.err.NOENT());
-                    
-                    var off = {bytes:0};
-                    while (off.bytes < sectorBuffer.length) {
-                        var entryIdx = off.bytes,
-                            signalByte = sectorBuffer[entryIdx];
-                        if (signalByte === S.entryDoneFlag) break;
-                        else if (signalByte === S.entryFreeFlag || signalByte & S.entryReserved) {
-                            // skip free/reserved entries
-                            off.bytes += S.dirEntry.size;
-                            continue;
-                        }
-                        
-                        var attrByte = sectorBuffer[entryIdx+11],
-                            entryType = (attrByte === S.longDirFlag) ? S.longDirEntry : S.dirEntry;
-                        var entry = entryType.valueFromBytes(sectorBuffer, off);
-//console.log("entry:", entry);
-                        if (entryType === S.longDirEntry) {
-                            var firstEntry;
-                            if (entry.Ord & S.lastLongFlag) {
-                                firstEntry = true;
-                                entry.Ord &= ~S.lastLongFlag;
-                                long = {
-                                    name: null,
-                                    sum: entry.Chksum,
-                                    _rem: entry.Ord-1,
-                                    _arr: []
-                                }
-                            }
-                            if (firstEntry || long && entry.Chksum === long.sum && entry.Ord === long._rem--) {
-                                var namepart = entry.Name1;
-                                if (entry.Name1.length === 5) {
-                                    namepart += entry.Name2;
-                                    if (entry.Name2.length === 6) {
-                                        namepart += entry.Name3;
-                                    }
-                                }
-                                long._arr.push(namepart);
-                                if (!long._rem) {
-                                    long.name = long._arr.reverse().join('');
-                                    delete long._arr;
-                                    delete long._rem;
-                                }
-                            } else long = null;
-                        } else if (!entry.Attr.volume_id) {
-                            var bestName = null;
-                            if (long && long.name) {
-                                var sum = reduceBuffer(sectorBuffer, entryIdx, entryIdx+11, nameChkSum);
-                                if (sum === long.sum) bestName = long.name;
-                            }
-                            if (!bestName) {
-                                if (signalByte === 0x05) entry.Name.filename = '\u00EF'+entry.Name.filename.slice(1);
-                                
-                                var nam = entry.Name.filename.replace(/ +$/, ''),
-                                    ext = entry.Name.extension.replace(/ +$/, '');
-                                // TODO: lowercase bits http://en.wikipedia.org/wiki/8.3_filename#Compatibility
-                                //       via NTRes, bits 0x08 and 0x10 http://www.fdos.org/kernel/fatplus.txt.1
-                                bestName = (ext) ? nam+'.'+ext : nam;
-                            }
-                            
-                            console.log(hex(sectorBuffer[entryIdx],0xFF), entry.Name, bestName);
-                            if (bestName.toUpperCase() === name) return cb(null, makeStat(entry));
-                            long = null;
-                        } else long = null;
-                    }
-                    if (off.bytes >= sectorBuffer.length) processSector(idx+1);
-                    else cb(S.err.NOENT());
+            function processNext(next) {
+                next = next(function (e, d) {
+                    if (e) cb(e);
+                    else if (!d) cb(S.err.NOENT());
+                    else if (d._name.toUpperCase() === name) return cb(null, makeStat(d));
+                    else processNext(next);
                 });
             }
-            processSector(0);
+            processNext(directoryIterator(dirChain));
         }
         
+        function directoryIterator(dirChain) {
+            var _cachedBuf = null;
+            function getSectorBuffer(n, cb) {
+                if (_cachedBuf && n === _cachedBuf._n) cb(null, _cachedBuf);
+                else _cachedBuf = null, dirChain.readSector(n, function (e,d) {
+                    if (e) cb(e);
+                    else {
+                        d._n = n;
+                        _cachedBuf = d;
+                        getSectorBuffer(n, cb);
+                    }
+                });
+            }
+            
+            var secIdx = 0,
+                off = {bytes:0},
+                long = null;
+            function getNextEntry(cb) {
+                if (off.bytes >= getSectorSize()) {         // TODO: could dir entries cross sectors?!
+                    secIdx += 1;
+                    off.bytes -= getSectorSize();
+                }
+console.log("READING sector", secIdx, "at byte", off);
+                getSectorBuffer(secIdx, function (e, sectorBuffer) {
+                    if (e) return cb(S.err.IO());
+                    else if (!sectorBuffer) return cb(null, null);
+                    
+                    var entryIdx = off.bytes,
+                        signalByte = sectorBuffer[entryIdx];
+                    if (signalByte === S.entryDoneFlag) return cb(null, null);
+                    else if (signalByte === S.entryFreeFlag || signalByte & S.entryReserved) {
+                        // skip free/reserved entries
+                        off.bytes += S.dirEntry.size;
+                        long = null;
+                        return getNextEntry(cb);
+                    }
+                    
+                    var attrByte = sectorBuffer[entryIdx+11],
+                        entryType = (attrByte === S.longDirFlag) ? S.longDirEntry : S.dirEntry;
+                    var entry = entryType.valueFromBytes(sectorBuffer, off);
+console.log("entry:", entry, secIdx, entryIdx);
+                    if (entryType === S.longDirEntry) {
+                        var firstEntry;
+                        if (entry.Ord & S.lastLongFlag) {
+                            firstEntry = true;
+                            entry.Ord &= ~S.lastLongFlag;
+                            long = {
+                                name: null,
+                                sum: entry.Chksum,
+                                _rem: entry.Ord-1,
+                                _arr: []
+                            }
+                        }
+                        if (firstEntry || long && entry.Chksum === long.sum && entry.Ord === long._rem--) {
+                            var namepart = entry.Name1;
+                            if (entry.Name1.length === 5) {
+                                namepart += entry.Name2;
+                                if (entry.Name2.length === 6) {
+                                    namepart += entry.Name3;
+                                }
+                            }
+                            long._arr.push(namepart);
+                            if (!long._rem) {
+                                long.name = long._arr.reverse().join('');
+                                delete long._arr;
+                                delete long._rem;
+                            }
+                        } else long = null;
+                    } else if (!entry.Attr.volume_id) {
+                        var bestName = null;
+                        if (long && long.name) {
+                            var sum = reduceBuffer(sectorBuffer, entryIdx, entryIdx+11, nameChkSum);
+                            if (sum === long.sum) bestName = long.name;
+                        }
+                        if (!bestName) {
+                            if (signalByte === 0x05) entry.Name.filename = '\u00EF'+entry.Name.filename.slice(1);
+                            
+                            var nam = entry.Name.filename.replace(/ +$/, ''),
+                                ext = entry.Name.extension.replace(/ +$/, '');
+                            // TODO: lowercase bits http://en.wikipedia.org/wiki/8.3_filename#Compatibility
+                            //       via NTRes, bits 0x08 and 0x10 http://www.fdos.org/kernel/fatplus.txt.1
+                            bestName = (ext) ? nam+'.'+ext : nam;
+                        }
+                        entry._name = bestName;
+                        long = null;
+                        return cb(null, entry);
+                    } else long = null;
+                    getNextEntry(cb);
+                });
+            }
+            
+            function iter(cb) {
+                getNextEntry(cb);
+                return iter;
+            }
+            return iter;
+        }
         
         function openSectorChain(firstSector, numSectors) {
             var chain = {};
@@ -377,14 +412,17 @@ console.log("short?", short);
                 });
                 entries[entries.length - 1].Ord &= S.lastLongFlag;
             }
-            entries.reverse();
-            
 console.log("prelim entries are:", entries);
             
+            var nextEntry = directoryIterator(dirChain);
             
-            // TODO: make long+short entries
+            
             // TODO: find an unused spot (or extend) dirChain for entries [name may be taken!]
+            // TODO: finalize short name and apply CRC to long entries
             // TODO: what about initial settings? [FstClus can be 0, IIRC]
+            
+            
+            entries.reverse();
             
             // TODO: implement
             cb(new Error("Not implemented!"));
@@ -394,7 +432,7 @@ console.log("prelim entries are:", entries);
             var spets = absoluteSteps(path).reverse();
             function findNext(chain) {
                 var name = spets.pop();
-                console.log("Looking for:", name);
+console.log("Looking for:", name);
                 findInDirectory(chain, name, function (e,stats) {
                     if (e) cb(e, spets.concat(name), chain);
                     else {
