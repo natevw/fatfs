@@ -191,7 +191,7 @@ exports.createFileSystem = function (volume) {
                             long = {
                                 name: null,
                                 sum: entry.Chksum,
-                                _rem: entry.Ord,
+                                _rem: entry.Ord-1,
                                 _arr: []
                             }
                         }
