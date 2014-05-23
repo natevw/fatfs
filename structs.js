@@ -138,7 +138,7 @@ Object.keys(_errors).forEach(function (sym) {
     var msg = _errors[sym];
     exports.err[sym] = function () {
         var e = new Error(msg);
-        e.code = 'E'+sym;
+        e.code = sym;
         return e;
     };
 });

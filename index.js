@@ -329,14 +329,29 @@ exports.createFileSystem = function (volume) {
             return chain;
         }
         
-        function chainForPath(path, cb) {
+        function addFile(dirChain, name, cb) {
+            // TODO: implement
+            cb(new Error("Not implemented!"));
+        }
+        
+        function chainForPath(path, opts, cb) {
+            if (typeof opts === 'function') {
+                cb = opts;
+                opts = {};
+            }
             var spets = absoluteSteps(path).reverse();
             function findNext(cluster) {
                 var name = spets.pop(),
+                    mayCreate = (!spets.length && opts.createFile) ? 'file' : null,
                     chain = fs._openClusterChain(cluster);
+console.log("findNext", spets, opts, mayCreate);
                 console.log("Looking for:", name);
                 fs._findInDirectory(chain, name, function (e,stats) {
-                    if (e) cb(e);
+                    if (mayCreate && e.code === 'NOENT') addFile(chain, name, function (e,file) {
+                        if (e) cb(e);
+                        else findNext(file._firstCluster);
+                    });
+                    else if (e) cb(e);
                     else if (spets.length) findNext(stats._firstCluster);
                     else {
                         var chain = fs._openClusterChain(stats._firstCluster);
@@ -391,6 +406,21 @@ console.log("have chain for file:", path, stats);
                 readUntilFull(0);
             }
         });
+    };
+    
+    fs.writeFile = function (path, data, opts, cb) {
+        if (typeof opts === 'function') {
+            cb = opts;
+            opts = {};
+        }
+        // TODO: opts.flag (/opts.mode for readonly?)
+        if (typeof data === 'string') data = Buffer(data, opts.encoding);
+        fs._chainForPath(path, {createFile:true}, function (e,stats,chain) {
+            if (e) cb(e);
+            // TODO: implement!
+        });
+        
+        
     };
     
     
