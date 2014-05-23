@@ -271,7 +271,6 @@ exports.createFileSystem = function (volume) {
                                 bestName = (ext) ? nam+'.'+ext : nam;
                             }
                             
-                            // TODO: filter out volume entries
                             console.log(hex(sectorBuffer[entryIdx],0xFF), entry.Name, bestName);
                             if (bestName.toUpperCase() === name) return cb(null, makeStat(entry));
                             long = null;
