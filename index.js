@@ -384,6 +384,12 @@ exports.createFileSystem = function (volume) {
             return chain;
         }
         
+        function writeToChain(chain, offset, data, cb) {
+            // TODO: stuff and things… (readSector, addSectors if needed, writeSector)
+            cb(new Error("Not implemented!"));
+        }
+        
+        
         function addFile(dirChain, name, cb) {
             var entries = [],
                 short = shortname(name);
@@ -425,7 +431,7 @@ exports.createFileSystem = function (volume) {
                 function processNext(next) {
                     next = next(function (e, d, entryPos) {
                         if (e) cb(e);
-                        else if (!d) cb(null, {tail:maxTail+1, home:entryPos});
+                        else if (!d) cb(null, {tail:maxTail+1, target:entryPos});
                         else if (d._free) ;         // TODO: look for long enough reusable run
                         else if (d._name.toUpperCase() === matchName) return cb(S.err.EXIST());
                         else {
@@ -465,18 +471,22 @@ exports.createFileSystem = function (volume) {
                 entries.slice(1).forEach(function (entry) {
                     entry.Chksum = nameSum;
                 });
-                
-                
                 entries.reverse();
+                
                 var entriesData = new Buffer(S.dirEntry.size*entries.length),
                     dataOffset = {bytes:0};
                 entries.forEach(function (entry) {
                     var entryType = ('Ord' in entry) ? S.longDirEntry : S.dirEntry;
                     entryType.bytesFromValue(entry, entriesData, dataOffset);
                 });
-                console.log("WOULD WRITE:", entriesData.length, "byte directory entry", d.home, "bytes into", dirChain);
-                // TODO: using general writing mechanism, append entriesData to dirChain
-                cb(new Error("Not implemented!"));
+                console.log("WOULD WRITE:", entriesData.length, "byte directory entry", d.target, "bytes into", dirChain);
+                
+                // TODO: where is file's own chain? we should have included that in directory entry…
+                var fileChain = null;
+                writeToChain(dirChain, d.target, entriesData, function (e) {
+                    // TODO: if we get error, what/should we clean up?
+                    cb(e, fileChain);
+                });
             });
         }
         
