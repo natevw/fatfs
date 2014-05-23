@@ -284,6 +284,19 @@ exports.createFileSystem = function (volume) {
             processSector(0);
         }
         
+        
+        function openSectorChain(firstSector, numSectors) {
+            var chain = {};
+            
+            chain.readSector = function (i, cb) {
+                var s = firstDataSector - rootDirSectors;
+                if (i < rootDirSectors) readSector(s+i, cb);
+                else _noData(cb);
+            };
+            
+            return chain;
+        }
+        
         function openClusterChain(firstCluster, opts) {
             var chain = {},
                 cache = [firstCluster];
@@ -312,7 +325,7 @@ exports.createFileSystem = function (volume) {
                 process.nextTick(cb.bind(null, null, null));
             }
             
-            chain.readSector = (firstCluster > 0) ? function (i, cb) {
+            chain.readSector = function (i, cb) {
                 var o = i % D.SecPerClus,
                     c = (i - o) / D.SecPerClus;
                 sectorForClusterAtIdx(c, function (e,s) {
@@ -320,11 +333,12 @@ exports.createFileSystem = function (volume) {
                     else if (s) readSector(s+o, cb);
                     else _noData(cb);
                 });
-            } : function (i, cb) {
-                var s = firstDataSector - rootDirSectors;
-                if (i < rootDirSectors) readSector(s+i, cb);
-                else _noData(cb);
             };
+            
+            //chain.writeSector
+            //chain.addSector
+            //chain.truncate
+            
             
             return chain;
         }
@@ -345,40 +359,31 @@ exports.createFileSystem = function (volume) {
                 opts = {};
             }
             var spets = absoluteSteps(path).reverse();
-            function findNext(cluster) {
+            function findNext(chain) {
                 var name = spets.pop(),
-                    mayCreate = (!spets.length && opts.createFile) ? 'file' : null,
-                    chain = fs._openClusterChain(cluster);
+                    mayCreate = (!spets.length && opts.createFile) ? 'file' : null;
 console.log("findNext", spets, opts, mayCreate);
                 console.log("Looking for:", name);
-                fs._findInDirectory(chain, name, function (e,stats) {
+                findInDirectory(chain, name, function (e,stats) {
                     if (mayCreate && e.code === 'NOENT') addFile(chain, name, function (e,file) {
                         if (e) cb(e);
                         else findNext(file._firstCluster);
                     });
                     else if (e) cb(e);
-                    else if (spets.length) findNext(stats._firstCluster);
                     else {
-                        var chain = fs._openClusterChain(stats._firstCluster);
-                        cb(null, stats, chain);
+                        var chain = openClusterChain(stats._firstCluster);
+                        if (spets.length) findNext(chain);
+                        else cb(null, stats, chain);
                     }
                 });
             }
-            findNext(fs._rootDirCluster);
+            var chain = (isFAT16) ?
+                openSectorChain(firstDataSector - rootDirSectors, rootDirSectors) :
+                openClusterChain(D.RootClus);
+            findNext(chain);
         }
         
-        
         fs._chainForPath = chainForPath;
-        fs._openClusterChain = openClusterChain;
-        fs._sectorForCluster = sectorForCluster;
-        fs._fetchFromFAT = fetchFromFAT;
-        
-        // NOTE: will be negative (and potentially a non-integer) for FAT12/FAT16!
-        //var firstRootDirSecNum = (isFAT16) ? firstDataSector - rootDirSectors : sectorForCluster(D.RootClus);
-        fs._rootDirCluster = (isFAT16) ? 2 - rootDirSectors / D.SecPerClus : D.RootClus;
-        fs._findInDirectory = findInDirectory;
-        
-        
     });
     
     fs.readdir = function (path, cb) {
