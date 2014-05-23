@@ -147,16 +147,29 @@ exports.createFileSystem = function (volume) {
                 EntOffset = FATOffset % d.BytsPerSec;
             readFromSectorOffset(SecNum, EntOffset, entryStruct.size, function (e) {
                 if (e) return cb(e);
-                var entry = entryStruct.valueFromBytes(sectorBuffer);
+                var entry = entryStruct.valueFromBytes(sectorBuffer), prefix;
                 if (fatType === 'fat12') {
                     if (clusterNum % 2) {
                         entry.NextCluster = (entry.NextCluster0a << 8) + entry.NextCluster0bc;
                     } else {
                         entry.NextCluster = (entry.NextCluster1ab << 4) + entry.NextCluster1c;
                     }
+                    prefix = 0x00;
                 }
-                else if (fatType === 'fat32') entry.NextCluster &= 0x0FFFFFFF;
-                cb(null, entry.NextCluster);
+                else if (fatType === 'fat16') {
+                    prefix = 0xff00;
+                } else if (fatType === 'fat32') {
+                    entry.NextCluster &= 0x0FFFFFFF;
+                    prefix = 0x0FFFFF00;
+                }
+                
+                var val = entry.NextCluster;
+                if (val === 0) cb(null, 'free');
+                else if (val === 1) cb(null, '-invalid-');
+                else if (val > prefix+0xF8) cb(null, 'eof');
+                else if (val === prefix+0xF7) cb(null, 'bad');
+                else if (val > prefix+0xF0) cb(null, 'reserved');
+                else cb(null, val);
             });
         }
         
@@ -164,66 +177,107 @@ exports.createFileSystem = function (volume) {
             return ((sum & 1) ? 0x80 : 0) + (sum >>> 1) + c & 0xFF;
         }
         
+        // TODO: return an actual `instanceof fs.Stat` somehow?
+        function makeStat(dirEntry) {
+            var stats = {};
+            stats.isFile = function () {
+                return (!dirEntry.Attr.volume_id && !dirEntry.Attr.directory);
+            };
+            stats.isDirectory = function () {
+                return dirEntry.Attr.directory;
+            };
+            // TODO: are these all correct? (especially block/char)
+            stats.isBlockDevice = function () { return true; }
+            stats.isCharacterDevice = function () { return false; }
+            stats.isSymbolicLink = function () { return false; }
+            stats.isFIFO = function () { return false; }
+            stats.isSocket = function () { return false; }
+            // TODO:
+            stats.atime;
+            stats.mtime;
+            stats.ctime;
+            stats._firstCluster = (dirEntry.FstClusHI << 16) + dirEntry.FstClusLO
+            return stats;
+        }
+        
         function findInDirectory(dir_c, name, cb) {
-            var s = sectorForCluster(dir_c);
-            readSector(s, function (e) {
-                if (e) throw e;
-                
-                var off = {bytes:0},
-                    long = null;        // {name,sum}
-                while (off.bytes < sectorBuffer.length) {
-                    var entryIdx = off.bytes,
-                        signalByte = sectorBuffer[entryIdx];
-                    if (!signalByte) break;         // no more entries
-                    else if (signalByte === 0xE5) { // free entry, skip
-                        off.bytes += S.dirEntry.size;
-                        continue;
-                    }
+            var long = null,        // gathers {name,sum} for long filenames (potentially across sectors)
+                s = sectorForCluster(dir_c),
+                count = (dir_c > 0) ? d.SecPerClus : rootDirSectors;
+            processSector(s, count, dir_c);
+            
+            function processSector(s, sRemaining, c) {
+                readSector(s, function (e) {
+                    if (e) throw e;
                     
-                    var attrByte = sectorBuffer[entryIdx+11],
-                        entryType = (attrByte === S.longDirFlag) ? S.longDirEntry : S.dirEntry;
-                    var entry = entryType.valueFromBytes(sectorBuffer, off);
-                    if (entryType === S.longDirEntry) {
-                        var firstEntry;
-                        if (entry.Ord & 0x40) {
-                            firstEntry = true;
-                            entry.Ord &= ~0x40;
-                            long = {
-                                name: null,
-                                sum: entry.Chksum,
-                                _rem: entry.Ord-1,
-                                _arr: []
-                            }
+                    var off = {bytes:0};
+                    while (off.bytes < sectorBuffer.length) {
+                        var entryIdx = off.bytes,
+                            signalByte = sectorBuffer[entryIdx];
+                        if (!signalByte) break;         // no more entries
+                        else if (signalByte === 0xE5) { // free entry, skip
+                            off.bytes += S.dirEntry.size;
+                            continue;
                         }
-                        if (firstEntry || long && entry.Chksum === long.sum && entry.Ord === long._rem--) {
-                            var name = entry.Name1;
-                            if (entry.Name1.length === 5) {
-                                name += entry.Name2;
-                                if (entry.Name2.length === 6) {
-                                    name += entry.Name3;
+                        
+                        var attrByte = sectorBuffer[entryIdx+11],
+                            entryType = (attrByte === S.longDirFlag) ? S.longDirEntry : S.dirEntry;
+                        var entry = entryType.valueFromBytes(sectorBuffer, off);
+                        if (entryType === S.longDirEntry) {
+                            var firstEntry;
+                            if (entry.Ord & 0x40) {
+                                firstEntry = true;
+                                entry.Ord &= ~0x40;
+                                long = {
+                                    name: null,
+                                    sum: entry.Chksum,
+                                    _rem: entry.Ord-1,
+                                    _arr: []
                                 }
                             }
-                            long._arr.push(name);
-                            if (!long._rem) {
-                                long.name = long._arr.reverse().join('');
-                                delete long._arr;
-                                delete long._rem;
+                            if (firstEntry || long && entry.Chksum === long.sum && entry.Ord === long._rem--) {
+                                var name = entry.Name1;
+                                if (entry.Name1.length === 5) {
+                                    name += entry.Name2;
+                                    if (entry.Name2.length === 6) {
+                                        name += entry.Name3;
+                                    }
+                                }
+                                long._arr.push(name);
+                                if (!long._rem) {
+                                    long.name = long._arr.reverse().join('');
+                                    delete long._arr;
+                                    delete long._rem;
+                                }
+                            } else long = null;
+                        } else {
+                            var longName = null;
+                            if (long && long.name) {
+                                var sum = reduceBuffer(sectorBuffer, entryIdx, entryIdx+11, nameChkSum);
+                                if (sum === long.sum) longName = long.name;
                             }
-                        } else long = null;
-                    } else {
-                        var longName = null;
-                        if (long && long.name) {
-                            var sum = reduceBuffer(sectorBuffer, entryIdx, entryIdx+11, nameChkSum);
-                            if (sum === long.sum) longName = long.name;
+                            if (signalByte === 0x05) entry.Name.filename = '\u00EF'+entry.Name.filename.slice(1);
+                            
+                            console.log(hex(sectorBuffer[entryIdx],0xFF), entry.Name, longName);
+                            if ((longName || entry.Name) === name) return cb(null, makeStat(entry));
+                            long = null;
                         }
-                        if (signalByte === 0x05) entry.Name.filename = '\u00EF'+entry.Name.filename.slice(1);
-                        
-                        console.log(hex(sectorBuffer[entryIdx],0xFF), entry.Name, longName);
-                        long = null;
                     }
-                }
-            });
-            
+                    if (off.bytes >= sectorBuffer.length) {
+                        if (sRemaining) processSector(s+1, sRemaining-1, c);
+                        else if (c) fetchFromFAT(c, function (e,nextCluster) {
+                            if (e) cb(e);
+                            else if (typeof nextCluster === 'number') {
+                                var s = sectorForCluster(nextCluster);
+                                processSector(s, d.SecPerClus, nextCluster);
+                            } else {
+                                console.log("Current cluster was", nextCluster);
+                                cb(S.err.NOENT());
+                            }
+                        });
+                    } else cb(S.err.NOENT());
+                });
+            }
         }
         
         fs._sectorForCluster = sectorForCluster;
@@ -253,17 +307,22 @@ exports.createFileSystem = function (volume) {
         // TODO: implement
     };
     fs.readFile = function (path, opts, cb) {
-        if (typeof opts === 'function ') {
+        if (typeof opts === 'function') {
             cb = opts;
             opts = {};
         }
         // TODO: opts.flag, opts.encoding
-        var steps = absoluteSteps(path);
-        console.log("steps to file:", steps);
-        fs._findInDirectory(fs._rootDirCluster, steps[0], function (e,d) {
-            if (e) console.error("Couldn't find", steps[0], "in root directory");
-            else console.log(d);
-        });
+        var spets = absoluteSteps(path).reverse();
+        function findNext(cluster) {
+            var name = spets.pop();
+            console.log("Looking for:", name);
+            fs._findInDirectory(cluster, name, function (e,d) {
+                if (e) cb(e);
+                else if (spets.length) findNext(d._firstCluster);
+                else cb(null, d);
+            });
+        }
+        findNext(fs._rootDirCluster);
     };
     
     

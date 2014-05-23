@@ -127,4 +127,18 @@ exports.fatField = {
     ]),
 };
 
+var _errors = {
+    IO: "Input/output error",
+    NOENT: "No such file or directory",
+    
+};
 
+exports.err = {};
+Object.keys(_errors).forEach(function (sym) {
+    var msg = _errors[sym];
+    exports.err[sym] = function () {
+        var e = new Error(msg);
+        e.code = 'E'+sym;
+        return e;
+    };
+});
