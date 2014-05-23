@@ -426,8 +426,8 @@ console.log("prelim entries are:", entries);
                         else if (d._name.toUpperCase() === matchName) return cb(S.err.EXIST());
                         else {
                             var dNum = 1,
-                                dName = entries[0].Name.filename,
-                                dTail = d.Name.filename.match(/(.*)~(\d+)/);
+                                dName = d.Name.filename,
+                                dTail = dName.match(/(.*)~(\d+)/);
                             if (dTail) {
                                 dNum = +dTail[2];
                                 dName = dTail[1];
@@ -435,6 +435,7 @@ console.log("prelim entries are:", entries);
                             if (tailName.extension === d.Name.extension &&
                                 tailName.filename.indexOf(dName) === 0)
                             {
+console.log("ADJUSTING maxTail", tailName, d.Name)
                                 maxTail = Math.max(dNum, maxTail);
                             }
                             processNext(next);
