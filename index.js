@@ -247,7 +247,6 @@ exports.createFileSystem = function (volume) {
                     secIdx += 1;
                     off.bytes -= getSectorSize();
                 }
-console.log("READING sector", secIdx, "at byte", off);
                 getSectorBuffer(secIdx, function (e, sectorBuffer) {
                     if (e) return cb(S.err.IO());
                     else if (!sectorBuffer) return cb(null, null);
@@ -265,7 +264,7 @@ console.log("READING sector", secIdx, "at byte", off);
                     var attrByte = sectorBuffer[entryIdx+11],
                         entryType = (attrByte === S.longDirFlag) ? S.longDirEntry : S.dirEntry;
                     var entry = entryType.valueFromBytes(sectorBuffer, off);
-console.log("entry:", entry, secIdx, entryIdx);
+//console.log("entry:", entry, secIdx, entryIdx);
                     if (entryType === S.longDirEntry) {
                         var firstEntry;
                         if (entry.Ord & S.lastLongFlag) {
@@ -318,13 +317,13 @@ console.log("entry:", entry, secIdx, entryIdx);
             
             function iter(cb) {
                 getNextEntry(cb);
-                return iter;
+                return iter;            // TODO: previous value can't be re-used, so why make caller re-assign?
             }
             return iter;
         }
         
         function openSectorChain(firstSector, numSectors) {
-            var chain = {};
+            var chain = {_dbgSector:firstSector};
             
             chain.readSector = function (i, cb) {
                 var s = firstDataSector - rootDirSectors;
@@ -336,7 +335,7 @@ console.log("entry:", entry, secIdx, entryIdx);
         }
         
         function openClusterChain(firstCluster, opts) {
-            var chain = {},
+            var chain = {_dbgCluster:firstCluster},
                 cache = [firstCluster];
             
             function extendCacheToInclude(i, cb) {          // NOTE: may `cb()` before returning!
@@ -384,8 +383,8 @@ console.log("entry:", entry, secIdx, entryIdx);
             var entries = [],
                 short = shortname(name);
             entries.push({
-                // TODO: numeric tail generation
                 Name: {filename:short.basis[0], extension:short.basis[1]},
+                // TODO: finalize initial properties…
                 Attr: {directory:false},
                 FstClusHI: 0,
                 FstClusLO: 0,
@@ -395,50 +394,77 @@ console.log("short?", short);
             if (1 || short.lossy) {         // HACK: always write long names until short.lossy more useful!
                 // name entries should be 0x0000-terminated and 0xFFFF-filled
                 var ENTRY_CHUNK_LEN = 13,
-                    partialLen = name.length % ENTRY_CHUNK_LEN,
+                    paddedName = name,
+                    partialLen = paddedName.length % ENTRY_CHUNK_LEN,
                     paddingNeeded = partialLen && (ENTRY_CHUNK_LEN - partialLen);
-                if (paddingNeeded--) name += '\u0000';
-                while (paddingNeeded-- > 0) name += '\uFFFF';
+                if (paddingNeeded--) paddedName += '\u0000';
+                while (paddingNeeded-- > 0) paddedName += '\uFFFF';
                 // now fill in as many entries as it takes
                 var off = 0,
                     ord = 1;
-                while (off < name.length) entries.push({
+                while (off < paddedName.length) entries.push({
                     Ord: ord++,
-                    Name1: name.slice(off, off+=5),
+                    Name1: paddedName.slice(off, off+=5),
                     Attr: S.longDirFlag,
-                    Chksum: null,           // TODO: this must
-                    Name2: name.slice(off, off+=6),
-                    Name3: name.slice(off, off+=2)
+                    Chksum: null,           // TODO: this must get set
+                    Name2: paddedName.slice(off, off+=6),
+                    Name3: paddedName.slice(off, off+=2)
                 });
                 entries[entries.length - 1].Ord &= S.lastLongFlag;
             }
 console.log("prelim entries are:", entries);
             
-            var nextEntry = directoryIterator(dirChain);
+            function prepareForEntries(cb) {
+                var matchName = name.toUpperCase(),
+                    tailName = entries[0].Name,
+                    maxTail = 0;
+                function processNext(next) {
+                    // TODO: we also need to locate home for `entries`…!
+                    next = next(function (e, d) {
+                        if (e) cb(e);
+                        else if (!d) cb(null, maxTail);
+                        else if (d._name.toUpperCase() === matchName) return cb(S.err.EXIST());
+                        else {
+                            var dNum = 1,
+                                dName = entries[0].Name.filename,
+                                dTail = d.Name.filename.match(/(.*)~(\d+)/);
+                            if (dTail) {
+                                dNum = +dTail[2];
+                                dName = dTail[1];
+                            }
+                            if (tailName.extension === d.Name.extension &&
+                                tailName.filename.indexOf(dName) === 0)
+                            {
+                                maxTail = Math.max(dNum, maxTail);
+                            }
+                            processNext(next);
+                        }
+                    });
+                }
+                processNext(directoryIterator(dirChain));
+            }
             
-            
-            // TODO: find an unused spot (or extend) dirChain for entries [name may be taken!]
-            // TODO: finalize short name and apply CRC to long entries
-            // TODO: what about initial settings? [FstClus can be 0, IIRC]
-            
-            
-            entries.reverse();
-            
-            // TODO: implement
-            cb(new Error("Not implemented!"));
+            prepareForEntries(function (e, d) {
+                if (e) cb(e);
+                else console.log(d), cb(new Error("Not implemented!"));
+                
+                // TODO: find an unused spot (or extend) dirChain for entries [name may be taken!]
+                // TODO: finalize short name and apply CRC to long entries
+                entries.reverse();
+            });
         }
         
         function chainForPath(path, cb) {
             var spets = absoluteSteps(path).reverse();
             function findNext(chain) {
                 var name = spets.pop();
-console.log("Looking for:", name);
+console.log("Looking in", chain, "for:", name);
                 findInDirectory(chain, name, function (e,stats) {
                     if (e) cb(e, spets.concat(name), chain);
                     else {
-                        var chain = openClusterChain(stats._firstCluster);
-                        if (spets.length) findNext(chain);
-                        else cb(null, stats, chain);
+                        var _chain = openClusterChain(stats._firstCluster);
+                        if (spets.length) findNext(_chain);
+                        else cb(null, stats, _chain);
                     }
                 });
             }
@@ -492,7 +518,7 @@ console.log("have chain for file:", path, stats);
         // TODO: opts.flag (/opts.mode for readonly?)
         if (typeof data === 'string') data = Buffer(data, opts.encoding);
         fs._chainForPath(path, function (e,stats,chain) {
-            // TODO: finish implementing!
+console.log("_chainForPath says", e, stats, chain);
             if (e && e.code !== 'NOENT') cb(e);
             else if (e) {
                 if (stats.length !== 1) cb(e);
