@@ -66,8 +66,8 @@ function reduceBuffer(buf, start, end, fn, res) {
 
 /* comparing C rounding trick from FAT spec with Math.ceil
 function tryBoth(d) {
-    var a = ((d.RootEntCnt * 32) + (d.BytsPerSec - 1)) / d.BytsPerSec >>> 0,
-        b = Math.ceil((d.RootEntCnt * 32) / d.BytsPerSec);
+    var a = ((D.RootEntCnt * 32) + (D.BytsPerSec - 1)) / D.BytsPerSec >>> 0,
+        b = Math.ceil((D.RootEntCnt * 32) / D.BytsPerSec);
     if (b !== a) console.log("try", b, a, (b === a) ? '' : '*');
     return (b === a);
 }
@@ -110,18 +110,18 @@ exports.createFileSystem = function (volume) {
         if (sectorBuffer[510] !== 0x55 || sectorBuffer[511] !== 0xAA) throw Error("Invalid volume signature!");
         var isFAT16 = sectorBuffer.readUInt16LE(22),        // HACK: get FATSz16 without full decode
             bootStruct = (isFAT16) ? S.boot16 : S.boot32;
-        var d = bootStruct.valueFromBytes(sectorBuffer);
-        if (!d.BytsPerSec) throw Error("This looks like an ExFAT volume! (unsupported)");
-        setSectorSize(d.BytsPerSec);
+        var D = bootStruct.valueFromBytes(sectorBuffer);
+        if (!D.BytsPerSec) throw Error("This looks like an ExFAT volume! (unsupported)");
+        setSectorSize(D.BytsPerSec);
         
 //console.log(d);
         
-        var FATSz = (isFAT16) ? d.FATSz16 : d.FATSz32,
-            rootDirSectors = Math.ceil((d.RootEntCnt * 32) / d.BytsPerSec),
-            firstDataSector = d.ResvdSecCnt + (d.NumFATs * FATSz) + rootDirSectors,
-            totSec = (d.TotSec16) ? d.TotSec16 : d.TotSec32,
+        var FATSz = (isFAT16) ? D.FATSz16 : D.FATSz32,
+            rootDirSectors = Math.ceil((D.RootEntCnt * 32) / D.BytsPerSec),
+            firstDataSector = D.ResvdSecCnt + (D.NumFATs * FATSz) + rootDirSectors,
+            totSec = (D.TotSec16) ? D.TotSec16 : D.TotSec32,
             dataSec = totSec - firstDataSector,
-            countofClusters = Math.floor(dataSec / d.SecPerClus);
+            countofClusters = Math.floor(dataSec / D.SecPerClus);
         
         var fatType;
         if (countofClusters < 4085) {
@@ -137,14 +137,14 @@ exports.createFileSystem = function (volume) {
 //console.log("rootDirSectors", rootDirSectors, "firstDataSector", firstDataSector, "countofClusters", countofClusters, "=>", fatType);
         
         function sectorForCluster(n) {
-            return firstDataSector + (n-2)*d.SecPerClus;
+            return firstDataSector + (n-2)*D.SecPerClus;
         }
         
         function fetchFromFAT(clusterNum, cb) {
             var entryStruct = S.fatField[fatType],
                 FATOffset = (fatType === 'fat12') ? Math.floor(clusterNum/2) * entryStruct.size : clusterNum * entryStruct.size,
-                SecNum = d.ResvdSecCnt + Math.floor(FATOffset / d.BytsPerSec);
-                EntOffset = FATOffset % d.BytsPerSec;
+                SecNum = D.ResvdSecCnt + Math.floor(FATOffset / D.BytsPerSec);
+                EntOffset = FATOffset % D.BytsPerSec;
             readFromSectorOffset(SecNum, EntOffset, entryStruct.size, function (e) {
                 if (e) return cb(e);
                 var entry = entryStruct.valueFromBytes(sectorBuffer), prefix;
@@ -205,7 +205,7 @@ exports.createFileSystem = function (volume) {
             name = name.toUpperCase();
             var long = null,        // gathers {name,sum} for long filenames (potentially across sectors)
                 s = sectorForCluster(dir_c),
-                count = (dir_c > 0) ? d.SecPerClus : rootDirSectors;
+                count = (dir_c > 0) ? D.SecPerClus : rootDirSectors;
 console.log("Looking in sector", s, "- via cluster", dir_c, "- for", name);
             processSector(s, count, dir_c);
             
@@ -280,7 +280,7 @@ console.log("Looking in sector", s, "- via cluster", dir_c, "- for", name);
                             if (e) cb(e);
                             else if (typeof nextCluster === 'number') {
                                 var s = sectorForCluster(nextCluster);
-                                processSector(s, d.SecPerClus, nextCluster);
+                                processSector(s, D.SecPerClus, nextCluster);
                             } else {
                                 console.log("Current cluster was", nextCluster);
                                 cb(S.err.NOENT());
@@ -295,8 +295,8 @@ console.log("Looking in sector", s, "- via cluster", dir_c, "- for", name);
         fs._fetchFromFAT = fetchFromFAT;
         
         // NOTE: will be negative (and potentially a non-integer) for FAT12/FAT16!
-        //var firstRootDirSecNum = (isFAT16) ? firstDataSector - rootDirSectors : sectorForCluster(d.RootClus);
-        fs._rootDirCluster = (isFAT16) ? 2 - rootDirSectors / d.SecPerClus : d.RootClus;
+        //var firstRootDirSecNum = (isFAT16) ? firstDataSector - rootDirSectors : sectorForCluster(D.RootClus);
+        fs._rootDirCluster = (isFAT16) ? 2 - rootDirSectors / D.SecPerClus : D.RootClus;
         fs._findInDirectory = findInDirectory;
     });
     
@@ -317,7 +317,7 @@ console.log("Looking in sector", s, "- via cluster", dir_c, "- for", name);
             fs._findInDirectory(cluster, name, function (e,d) {
                 if (e) cb(e);
                 else if (spets.length) findNext(d._firstCluster);
-                else cb(null, d.isFile());
+                else cb(null, d);
             });
         }
         findNext(fs._rootDirCluster);
