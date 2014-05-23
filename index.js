@@ -194,12 +194,17 @@ exports.createFileSystem = function (volume) {
             stats.isSymbolicLink = function () { return false; }
             stats.isFIFO = function () { return false; }
             stats.isSocket = function () { return false; }
+            stats.size = dirEntry.FileSize;
+            stats.blksize = D.SecPerClus*D.BytsPerSec;
+            
             // TODO: more infos!
+            // …
+            stats.blocks;
             stats.atime;
             stats.mtime;
             stats.ctime;
             stats._firstCluster = (dirEntry.FstClusHI << 16) + dirEntry.FstClusLO
-            stats._dbgOrig = dirEntry;
+            //stats._dbgOrig = dirEntry;
             return stats;
         }
         
@@ -279,7 +284,7 @@ exports.createFileSystem = function (volume) {
             processSector(0);
         }
         
-        function openClusterChain(firstCluster, opts, cb) {
+        function openClusterChain(firstCluster, opts) {
             var chain = {},
                 cache = [firstCluster];
             
@@ -324,7 +329,26 @@ exports.createFileSystem = function (volume) {
             return chain;
         }
         
+        function chainForPath(path, cb) {
+            var spets = absoluteSteps(path).reverse();
+            function findNext(cluster) {
+                var name = spets.pop(),
+                    chain = fs._openClusterChain(cluster);
+                console.log("Looking for:", name);
+                fs._findInDirectory(chain, name, function (e,stats) {
+                    if (e) cb(e);
+                    else if (spets.length) findNext(stats._firstCluster);
+                    else {
+                        var chain = fs._openClusterChain(stats._firstCluster);
+                        cb(null, stats, chain);
+                    }
+                });
+            }
+            findNext(fs._rootDirCluster);
+        }
         
+        
+        fs._chainForPath = chainForPath;
         fs._openClusterChain = openClusterChain;
         fs._sectorForCluster = sectorForCluster;
         fs._fetchFromFAT = fetchFromFAT;
@@ -333,6 +357,8 @@ exports.createFileSystem = function (volume) {
         //var firstRootDirSecNum = (isFAT16) ? firstDataSector - rootDirSectors : sectorForCluster(D.RootClus);
         fs._rootDirCluster = (isFAT16) ? 2 - rootDirSectors / D.SecPerClus : D.RootClus;
         fs._findInDirectory = findInDirectory;
+        
+        
     });
     
     fs.readdir = function (path, cb) {
@@ -345,18 +371,26 @@ exports.createFileSystem = function (volume) {
             opts = {};
         }
         // TODO: opts.flag, opts.encoding
-        var spets = absoluteSteps(path).reverse();
-        function findNext(cluster) {
-            var name = spets.pop(),
-                chain = fs._openClusterChain(cluster);
-            console.log("Looking for:", name);
-            fs._findInDirectory(chain, name, function (e,d) {
-                if (e) cb(e);
-                else if (spets.length) findNext(d._firstCluster);
-                else cb(null, d);
-            });
-        }
-        findNext(fs._rootDirCluster);
+        fs._chainForPath(path, function (e,stats,chain) {
+            if (e) cb(e);
+            else {
+console.log("have chain for file:", path, stats);
+                var fileBuffer = Buffer(stats.size),
+                    bufferPos = 0;
+                function readUntilFull(i) {
+                    chain.readSector(i, function (e, d) {
+                        if (e) return cb(e);
+                        else if (d === 'eof') return cb(S.err.IO());
+                        
+                        d.copy(fileBuffer, bufferPos);
+                        bufferPos += d.length;
+                        if (bufferPos < fileBuffer.length) readUntilFull(i+1);
+                        else cb(null, fileBuffer);
+                    });
+                }
+                readUntilFull(0);
+            }
+        });
     };
     
     

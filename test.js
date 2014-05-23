@@ -18,10 +18,10 @@ function startTests(imagePath) {
     var fatfs = require("./index.js"),
         vol = require("./img_volume.js").createDriverSync(imagePath),
         fs = fatfs.createFileSystem(vol);
-setTimeout(function () {
+setTimeout(function () {            // HACK: should wait for 'ready' event or something (not implemented)
     fs.readFile("/TEST/FILE.TXT", function (e,d) {
         if (e) console.error("Couldn't read file:", e);
-        else console.log("File contents:", d);
+        else console.log("File contents of", d.length, "bytes:", d.toString());
     });
 }, 1e3);
 }
