@@ -211,7 +211,7 @@ exports.createFileSystem = function (volume) {
                             }
                         } else long = null;
                     } else {
-                        var longName;
+                        var longName = null;
                         if (long && long.name) {
                             var sum = reduceBuffer(sectorBuffer, entryIdx, entryIdx+11, nameChkSum);
                             if (sum === long.sum) longName = long.name;
