@@ -273,6 +273,7 @@ exports.createFileSystem = function (volume) {
                         } else long = null;
                     }
                     if (off.bytes >= sectorBuffer.length) processSector(idx+1);
+                    else cb(S.err.NOENT());
                 });
             }
             processSector(0);
