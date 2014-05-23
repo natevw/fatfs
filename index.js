@@ -261,7 +261,7 @@ exports.createFileSystem = function (volume) {
                         return getNextEntry(cb);
                     }
                     
-                    var attrByte = sectorBuffer[entryIdx+11],
+                    var attrByte = sectorBuffer[entryIdx+S.dirEntry.fields.Attr.offset],
                         entryType = (attrByte === S.longDirFlag) ? S.longDirEntry : S.dirEntry;
                     var entry = entryType.valueFromBytes(sectorBuffer, off);
 //console.log("entry:", entry, secIdx, entryIdx);
@@ -271,17 +271,18 @@ exports.createFileSystem = function (volume) {
                             firstEntry = true;
                             entry.Ord &= ~S.lastLongFlag;
                             long = {
-                                name: null,
+                                name: -1,
                                 sum: entry.Chksum,
                                 _rem: entry.Ord-1,
                                 _arr: []
                             }
                         }
                         if (firstEntry || long && entry.Chksum === long.sum && entry.Ord === long._rem--) {
-                            var namepart = entry.Name1;
-                            if (entry.Name1.length === 5) {
+                            var S_lde_f = S.longDirEntry.fields,
+                                namepart = entry.Name1;
+                            if (entry.Name1.length === S_lde_f.Name1.size/2) {
                                 namepart += entry.Name2;
-                                if (entry.Name2.length === 6) {
+                                if (entry.Name2.length === S_lde_f.Name2.size/2) {
                                     namepart += entry.Name3;
                                 }
                             }
@@ -295,11 +296,13 @@ exports.createFileSystem = function (volume) {
                     } else if (!entry.Attr.volume_id) {
                         var bestName = null;
                         if (long && long.name) {
-                            var sum = reduceBuffer(sectorBuffer, entryIdx, entryIdx+11, nameChkSum);
+                            var _nf = S.dirEntry.fields['Name'],
+                                pos = entryIdx + _nf.offset,
+                                sum = reduceBuffer(sectorBuffer, pos, pos+_nf.size, nameChkSum);
                             if (sum === long.sum) bestName = long.name;
                         }
                         if (!bestName) {
-                            if (signalByte === 0x05) entry.Name.filename = '\u00EF'+entry.Name.filename.slice(1);
+                            if (signalByte === S.entryIsE5Flag) entry.Name.filename = '\u00E5'+entry.Name.filename.slice(1);
                             
                             var nam = entry.Name.filename.replace(/ +$/, ''),
                                 ext = entry.Name.extension.replace(/ +$/, '');
@@ -393,7 +396,8 @@ exports.createFileSystem = function (volume) {
 console.log("short?", short);
             if (1 || short.lossy) {         // HACK: always write long names until short.lossy more useful!
                 // name entries should be 0x0000-terminated and 0xFFFF-filled
-                var ENTRY_CHUNK_LEN = 13,
+                var S_lde_f = S.longDirEntry.fields,
+                    ENTRY_CHUNK_LEN = (S_lde_f.Name1.size + S_lde_f.Name2.size + S_lde_f.Name3.size)/2,
                     paddedName = name,
                     partialLen = paddedName.length % ENTRY_CHUNK_LEN,
                     paddingNeeded = partialLen && (ENTRY_CHUNK_LEN - partialLen);
@@ -404,25 +408,24 @@ console.log("short?", short);
                     ord = 1;
                 while (off < paddedName.length) entries.push({
                     Ord: ord++,
-                    Name1: paddedName.slice(off, off+=5),
+                    Name1: paddedName.slice(off, off+=S_lde_f.Name1.size/2),
                     Attr: S.longDirFlag,
-                    Chksum: null,           // TODO: this must get set
-                    Name2: paddedName.slice(off, off+=6),
-                    Name3: paddedName.slice(off, off+=2)
+                    Chksum: null,
+                    Name2: paddedName.slice(off, off+=S_lde_f.Name2.size/2),
+                    Name3: paddedName.slice(off, off+=S_lde_f.Name3.size/2)
                 });
                 entries[entries.length - 1].Ord &= S.lastLongFlag;
             }
-console.log("prelim entries are:", entries);
             
             function prepareForEntries(cb) {
                 var matchName = name.toUpperCase(),
                     tailName = entries[0].Name,
-                    maxTail = 0;
+                    maxTail = 0, nFreeAt = null;
                 function processNext(next) {
                     // TODO: we also need to locate home for `entries`…!
                     next = next(function (e, d) {
                         if (e) cb(e);
-                        else if (!d) cb(null, maxTail);
+                        else if (!d) cb(null, {tail:maxTail+1, home:nFreeAt});
                         else if (d._name.toUpperCase() === matchName) return cb(S.err.EXIST());
                         else {
                             var dNum = 1,
@@ -435,7 +438,6 @@ console.log("prelim entries are:", entries);
                             if (tailName.extension === d.Name.extension &&
                                 tailName.filename.indexOf(dName) === 0)
                             {
-console.log("ADJUSTING maxTail", tailName, d.Name)
                                 maxTail = Math.max(dNum, maxTail);
                             }
                             processNext(next);
@@ -446,12 +448,29 @@ console.log("ADJUSTING maxTail", tailName, d.Name)
             }
             
             prepareForEntries(function (e, d) {
-                if (e) cb(e);
-                else console.log(d), cb(new Error("Not implemented!"));
+                if (e) return cb(e);
+                
+                if (d.tail) {
+                    var name = entries[0].Name.filename,
+                        suffix = '~'+d.tail,
+                        sufIdx = Math.min(name.indexOf(' '), name.length-suffix.length);
+                    if (sufIdx < 0) return cb(S.err.NAMETOOLONG());         // TODO: would EXIST be more correct?
+                    entries[0].Name.filename = name.slice(0,sufIdx)+suffix+name.slice(sufIdx+suffix.length);
+                    console.log("SHORTNAME now", entries[0].Name);
+                }
+                
+                var nameBuf = S.dirEntry.fields['Name'].bytesFromValue(entries[0].Name),
+                    nameSum = reduceBuffer(nameBuf, 0, nameBuf.length, nameChkSum, 0);
+                entries.slice(1).forEach(function (entry) {
+                    entry.Chksum = nameSum;
+                });
+                entries.reverse();
+                
+                console.log("Would write:",entries);
+                cb(new Error("Not implemented!"));
                 
                 // TODO: find an unused spot (or extend) dirChain for entries [name may be taken!]
                 // TODO: finalize short name and apply CRC to long entries
-                entries.reverse();
             });
         }
         
