@@ -1,5 +1,15 @@
 var S = require("./structs.js");
 
+function absoluteSteps(path) {
+    var steps = [];
+    path.split('/').forEach(function (str) {
+        // NOTE: these should actually be fine, just wasteful…
+        if (str === '..') steps.pop();
+        else if (str && str !== '.') steps.push(str);
+    });
+    return steps.map(longname);
+}
+
 // TODO: these are great candidates for special test coverage!
 var _snInvalid = /[^A-Z0-9$%'-_@~`!(){}^#&.]/g;         // NOTE: '.' is not valid but we split it away
 function shortname(name) {
@@ -47,13 +57,8 @@ function longname(name) {
     return name;
 }
 
-function absoluteSteps(path) {
-    var steps = [];
-    path.split('/').forEach(function (str) {
-        if (str === '..') steps.pop();
-        else if (str && str !== '.') steps.push(str);
-    });
-    return steps.map(longname);
+function nameChkSum(sum, c) {
+    return ((sum & 1) ? 0x80 : 0) + (sum >>> 1) + c & 0xFF;
 }
 
 // WORKAROUND: https://github.com/tessel/beta/issues/335
@@ -103,9 +108,14 @@ exports.createFileSystem = function (volume) {
             cb(e, sectorBuffer);
         });
     }
+    
     function readFromSectorOffset(secNum, offset, len, cb) {
         var secSize = getSectorSize();
         volume.read(sectorBuffer, 0, len, secNum*secSize+offset, cb);
+    }
+    
+    function writeToSectorOffset(secNum, offset, data, cb) {
+        cb(S.err._TODO());
     }
     
     // TODO: when/where to do this stuff? do we need a 'ready' event… :-(
@@ -224,11 +234,6 @@ exports.createFileSystem = function (volume) {
             });
         }
         
-        
-        function nameChkSum(sum, c) {
-            return ((sum & 1) ? 0x80 : 0) + (sum >>> 1) + c & 0xFF;
-        }
-        
         // TODO: return an actual `instanceof fs.Stat` somehow?
         function makeStat(dirEntry) {
             var stats = {};
@@ -294,7 +299,7 @@ exports.createFileSystem = function (volume) {
                     secIdx += 1;
                     off.bytes -= getSectorSize();
                 }
-                var entryPos = secIdx*getSectorSize() + off.bytes;
+                var entryPos = {sector:secIdx, offset:off.bytes};
                 getSectorBuffer(secIdx, function (e, sectorBuffer) {
                     if (e) return cb(S.err.IO());
                     else if (!sectorBuffer) return cb(null, null, entryPos);
@@ -389,9 +394,13 @@ exports.createFileSystem = function (volume) {
             var chain = {_dbgCluster:firstCluster},
                 cache = [firstCluster];
             
+            function _cacheComplete() {
+                return cache[cache.length-1] === 'eof';
+            }
+            
             function extendCacheToInclude(i, cb) {          // NOTE: may `cb()` before returning!
                 if (i < cache.length) cb(null, cache[i]);
-                else if (cache[cache.length-1] === 'eof') cb(null, 'eof');
+                else if (_cacheComplete()) cb(null, 'eof');
                 else fetchFromFAT(cache[cache.length-1], function (e,d) {
                     if (e) cb(e);
                     else if (typeof d === 'string' && d !== 'eof') cb(S.err.IO());
@@ -402,11 +411,18 @@ exports.createFileSystem = function (volume) {
                 });
             }
             
-            function sectorForClusterAtIdx(i, cb) {
+            function sectorForClusterAtIdx(i, alloc, cb) {
                 extendCacheToInclude(i, function (e,c) {
                     if (e) cb(e);
+                    else if (c === 'eof') {
+                        // TODO: extend if alloc, ??? if not
+                    }
                     else cb(null, sectorForCluster(c));
                 });
+            }
+            
+            function createSectors(i, cb) {
+                cb(S.err._TODO());
             }
             
             function _noData(cb) {
@@ -416,23 +432,52 @@ exports.createFileSystem = function (volume) {
             chain.readSector = function (i, cb) {
                 var o = i % D.SecPerClus,
                     c = (i - o) / D.SecPerClus;
-                sectorForClusterAtIdx(c, function (e,s) {
+                sectorForClusterAtIdx(c, false, function (e,s) {
                     if (e) cb(e);
                     else if (s) readSector(s+o, cb);
                     else _noData(cb);
                 });
             };
             
-            //chain.writeSector
+            chain.writeSector = function (i, data, cb) {
+                createSectors(i, function (e, s) {
+                    if (e) cb(e);
+                    else cb(S.err._TODO());
+                });
+            };
+            
             //chain.addSectors
             //chain.removeSectors
             
             return chain;
         }
         
-        function writeToChain(chain, offset, data, cb) {
-            // TODO: stuff and things… (readSector, addSectors if needed, writeSector)
-            cb(new Error("Not implemented!"));
+        function writeToChain(chain, targetPos, data, cb) {
+            // TODO: addSectors if needed!
+            function _writeToChain(sec, off, data, cb) {
+                var incomplete = (off || data.length < getSectorSize());
+                if (incomplete) chain.readSector(sec, function (e, orig) {
+                    if (e) return cb(e);
+                    else if (!orig) {
+                        orig = new Buffer(getSectorSize());
+                        orig.fill(0);
+                    }
+                    data.copy(orig, off);
+                    data = data.slice(getSectorSize() - off);
+                    chain.writeSector(sec, orig, function (e) {
+                        if (e) cb(e);
+                        else if (data.length) _writeToChain(sec+1, 0, data, cb);
+                        else cb(null);
+                    });
+                }); else chain.writeSector(sec, data, function (e) {
+                    if (e) return cb(e);
+                    
+                    data = data.slice(getSectorSize());
+                    if (data.length) _writeToChain(sec+1, 0, data, cb);
+                    else cb(null);
+                });
+            }
+            _writeToChain(targetPos.sector, targetPos.offset, data, cb);
         }
         
         
@@ -534,7 +579,7 @@ console.log("entry says", arguments);
                     });
                     
                     console.log("Writing", entriesData.length, "byte directory entry", d.target, "bytes into", dirChain);
-                    writeToChain(dirChain, d.target, entriesData, function (e) {
+                    writeToChain(dirChain, d.targetSector, d.targetOffset, entriesData, function (e) {
                         // TODO: if we get error, what/should we clean up?
                         if (e) cb(e);
                         else cb(null, openClusterChain(fileCluster));

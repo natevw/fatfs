@@ -144,7 +144,9 @@ var _errors = {
     INVAL: "Invalid argument",
     EXIST: "File exists",
     NAMETOOLONG: "Filename too long",
-    NOSPC: "No space left on device"
+    NOSPC: "No space left on device",
+    NOSYS: "Function not supported",
+    _TODO: "Not implemented yet!"
 };
 
 exports.err = {};
