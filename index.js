@@ -10,6 +10,29 @@ function absoluteSteps(path) {
     return steps.map(longname);
 }
 
+function parseFlags(flags) {
+    // read, write, append, create, truncate, exclusive
+    var info;           // NOTE: there might be more clever ways to "parse", but…
+    switch (flags) {
+        case 'r':   info = {read:true, write:false, create:false}; break;
+        case 'r+':  info = {read:true, write:true, create:false}; break;
+        case 'rs':  info = {read:true, write:false, create:false, sync:true}; break;
+        case 'rs+': info = {read:true, write:true, create:false, sync:true}; break;
+        case 'w':   info = {read:false, write:true, create:true, truncate:true}; break;
+        case 'wx':  info = {read:false, write:true, create:false, truncate:true}; break;
+        case 'w+':  info = {read:true, write:true, create:true, truncate:true}; break;
+        case 'wx+': info = {read:true, write:true, create:true, exclusive:true}; break;
+        case 'a':   info = {read:false, write:true, create:true, append:true}; break;
+        case 'ax':  info = {read:false, write:true, create:true, append:true, exclusive:true}; break;
+        case 'a+':  info = {read:true, write:true, create:true, append:true}; break;
+        case 'ax+': info = {read:true, write:true, create:true, append:true, exclusive:true}; break;
+        default: throw Error("Uknown mode!");
+    }
+    if (info.sync) throw Error("Mode not implemented.");    // TODO: what would this require of us?
+    return info;
+}
+
+
 // TODO: these are great candidates for special test coverage!
 var _snInvalid = /[^A-Z0-9$%'-_@~`!(){}^#&.]/g;         // NOTE: '.' is not valid but we split it away
 function shortname(name) {
@@ -100,7 +123,6 @@ function delayedCall(fn) {
 }
 
 function _noData(cb) { delayedCall(cb, null, null); }
-function _readOnly(cb) { delayedCall(cb, S.err.ROFS()); }
 
 
 exports.createFileSystem = function (volume) {
@@ -122,8 +144,9 @@ exports.createFileSystem = function (volume) {
     function writeSector(secNum, data, cb) {
 console.log("Writing sector", secNum, data, data.length);
         var secSize = getSectorSize();
+        // NOTE: these are internal assertions, public API will get proper `S.err`s
         if (data.length !== secSize) throw Error("Must write complete sector");
-        else if (!volume.write) _readOnly(cb);
+        else if (!volume.write) throw Error("Read-only filesystem");
         else volume.write(data, 0, secSize, secNum*secSize, cb);
     }
     
@@ -134,7 +157,7 @@ console.log("Writing sector", secNum, data, data.length);
     }
     function writeToSectorOffset(secNum, offset, data, cb) {
         var secSize = getSectorSize();
-        if (!volume.write) _readOnly(cb);
+        if (!volume.write) throw Error("Read-only filesystem");
         else volume.write(data, 0, data.length, secNum*secSize+offset, cb);
     }
     
@@ -656,6 +679,35 @@ console.log("Looking in", chain, "for:", name);
         //fs._readFromChain = readFromChain;
         fs._addFile = addFile;
     });
+    
+    
+    // NOTE: we really don't share namespace, but avoid first three anyway…
+    var fileDescriptors = [null,null,null];
+    
+    fs.open = function (path, flags, mode, cb) {
+        if (typeof mode === 'function') {
+            callback = mode;
+            mode = 0666;
+        }
+        
+        var fd = {flags:null,entry:null},
+            f = parseFlags(flags);
+        if (!volume.write && f.write || f.create || f.truncate) return delayedCall(cb, S.err.ROFS());
+        else fd.flags = f;
+        
+        fs._entryForPath(path, function (e,fileEntry) {
+            // TODO: *here* is where create should happen if f.create
+            // TODO: also f.truncate would be done here too I suppose
+            if (e) cb(e);
+            else {
+                fd.entry = fileEntry;
+                cb(null, fileDescriptors.push(fd));
+            }
+        });
+    };
+    
+    
+    
     
     fs.readdir = function (path, cb) {
         var steps = absoluteSteps(path);
