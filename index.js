@@ -564,7 +564,7 @@ console.log("Writing sector", secNum, data, data.length);
                 function processNext(next) {
                     next = next(function (e, d, entryPos) {
                         if (e) cb(e);
-                        else if (!d) cb(null, {tail:maxTail+1, target:entryPos});
+                        else if (!d) cb(null, {tail:maxTail+1, target:entryPos, lastEntry:true});
                         else if (d._free) processNext(next);         // TODO: look for long enough reusable run
                         else if (d._name.toUpperCase() === matchName) return cb(S.err.EXIST());
                         else {
@@ -611,6 +611,7 @@ console.log("Writing sector", secNum, data, data.length);
                         entry.Chksum = nameSum;
                     });
                     entries.reverse();
+                    if (d.lastEntry) entries.push({});
                     
                     var entriesData = new Buffer(S.dirEntry.size*entries.length),
                         dataOffset = {bytes:0};
