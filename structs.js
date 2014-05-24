@@ -146,6 +146,7 @@ var _errors = {
     NAMETOOLONG: "Filename too long",
     NOSPC: "No space left on device",
     NOSYS: "Function not supported",
+    ROFS: "ROFLCopter file system",
     _TODO: "Not implemented yet!"
 };
 

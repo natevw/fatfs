@@ -91,11 +91,22 @@ function hex(n, ff) {
     return (1+ff+n).toString(16).slice(1);
 }
 
+function delayedCall(fn) {
+    var ctx = this,
+        args = Array.prototype.slice.call(arguments, 1);
+    process.nextTick(function () {
+        fn.apply(ctx, args);
+    });
+}
+
+function _noData(cb) { delayedCall(cb, null, null); }
+function _readOnly(cb) { delayedCall(cb, S.err.ROFS()); }
+
 
 exports.createFileSystem = function (volume) {
     var fs = {};
     
-    var sectorBuffer;               // NOTE: must 
+    var sectorBuffer;               // TODO: get rid of this global (must be used/copied by cb before returning)
     function setSectorSize(len) {
         if (!sectorBuffer || sectorBuffer.length !== len) sectorBuffer = new Buffer(len);
     }
@@ -108,14 +119,23 @@ exports.createFileSystem = function (volume) {
             cb(e, sectorBuffer);
         });
     }
+    function writeSector(secNum, data, cb) {
+console.log("Writing sector", secNum, data, data.length);
+        var secSize = getSectorSize();
+        if (data.length !== secSize) throw Error("Must write complete sector");
+        else if (!volume.write) _readOnly(cb);
+        else volume.write(data, 0, secSize, secNum*secSize, cb);
+    }
     
+    // TODO: rewrite these in terms of readSector/writeSector
     function readFromSectorOffset(secNum, offset, len, cb) {
         var secSize = getSectorSize();
         volume.read(sectorBuffer, 0, len, secNum*secSize+offset, cb);
     }
-    
     function writeToSectorOffset(secNum, offset, data, cb) {
-        cb(S.err._TODO());
+        var secSize = getSectorSize();
+        if (!volume.write) _readOnly(cb);
+        else volume.write(data, 0, data.length, secNum*secSize+offset, cb);
     }
     
     // TODO: when/where to do this stuff? do we need a 'ready' event… :-(
@@ -152,7 +172,7 @@ exports.createFileSystem = function (volume) {
         
 //console.log("rootDirSectors", rootDirSectors, "firstDataSector", firstDataSector, "countofClusters", countofClusters, "=>", fatType);
         
-        function sectorForCluster(n) {
+        function firstSectorOfCluster(n) {
             return firstDataSector + (n-2)*D.SecPerClus;
         }
         
@@ -394,13 +414,13 @@ exports.createFileSystem = function (volume) {
             var chain = {_dbgCluster:firstCluster},
                 cache = [firstCluster];
             
-            function _cacheComplete() {
+            function _cacheIsComplete() {
                 return cache[cache.length-1] === 'eof';
             }
             
             function extendCacheToInclude(i, cb) {          // NOTE: may `cb()` before returning!
                 if (i < cache.length) cb(null, cache[i]);
-                else if (_cacheComplete()) cb(null, 'eof');
+                else if (_cacheIsComplete()) cb(null, 'eof');
                 else fetchFromFAT(cache[cache.length-1], function (e,d) {
                     if (e) cb(e);
                     else if (typeof d === 'string' && d !== 'eof') cb(S.err.IO());
@@ -411,28 +431,47 @@ exports.createFileSystem = function (volume) {
                 });
             }
             
-            function sectorForClusterAtIdx(i, alloc, cb) {
+            // NOTE: returns the final cluster (same as if called `extendCacheToInclude(len)`)
+            function expandChainToLength(len, cb) {
+                if (!_cacheIsComplete()) throw Error("Must be called only when cache is complete!");
+                else cache.pop();            // remove 'eof' entry until finished
+                
+                function addCluster(clustersNeeded, lastCluster) {
+                    allocateInFAT(lastCluster, function (e, newCluster) {
+                        if (e) cb(e);
+                        else storeToFAT(lastCluster, newCluster, function (e) {
+                            if (e) return cb(e);
+                            
+                            cache.push(newCluster);
+                            if (clustersNeeded) addCluster(clustersNeeded-1, newCluster);
+                            else {
+                                cache.push('eof');
+                                cb(null, newCluster);
+                            }
+                        });
+                    });
+                }
+                addCluster(len - cache.length, cache[cache.length - 1]);
+            }
+            
+            function firstSectorOfClusterAtIdx(i, alloc, cb) {
                 extendCacheToInclude(i, function (e,c) {
                     if (e) cb(e);
                     else if (c === 'eof') {
-                        // TODO: extend if alloc, ??? if not
+                        if (alloc) expandChainToCluster(i, function (e,c) {
+                            if (e) cb(e);
+                            else cb(null, firstSectorOfCluster(c));
+                        });
+                        else cb(null, null);
                     }
-                    else cb(null, sectorForCluster(c));
+                    else cb(null, firstSectorOfCluster(c));
                 });
-            }
-            
-            function createSectors(i, cb) {
-                cb(S.err._TODO());
-            }
-            
-            function _noData(cb) {
-                process.nextTick(cb.bind(null, null, null));
             }
             
             chain.readSector = function (i, cb) {
                 var o = i % D.SecPerClus,
                     c = (i - o) / D.SecPerClus;
-                sectorForClusterAtIdx(c, false, function (e,s) {
+                firstSectorOfClusterAtIdx(c, false, function (e,s) {
                     if (e) cb(e);
                     else if (s) readSector(s+o, cb);
                     else _noData(cb);
@@ -440,9 +479,11 @@ exports.createFileSystem = function (volume) {
             };
             
             chain.writeSector = function (i, data, cb) {
-                createSectors(i, function (e, s) {
+                var o = i % D.SecPerClus,
+                    c = (i - o) / D.SecPerClus;
+                firstSectorOfClusterAtIdx(c, true, function (e,s) {
                     if (e) cb(e);
-                    else cb(S.err._TODO());
+                    else writeSector(s+o, data, cb);
                 });
             };
             
@@ -453,8 +494,7 @@ exports.createFileSystem = function (volume) {
         }
         
         function writeToChain(chain, targetPos, data, cb) {
-            // TODO: addSectors if needed!
-            function _writeToChain(sec, off, data, cb) {
+            function _writeToChain(sec, off, data) {
                 var incomplete = (off || data.length < getSectorSize());
                 if (incomplete) chain.readSector(sec, function (e, orig) {
                     if (e) return cb(e);
@@ -466,18 +506,18 @@ exports.createFileSystem = function (volume) {
                     data = data.slice(getSectorSize() - off);
                     chain.writeSector(sec, orig, function (e) {
                         if (e) cb(e);
-                        else if (data.length) _writeToChain(sec+1, 0, data, cb);
+                        else if (data.length) _writeToChain(sec+1, 0, data);
                         else cb(null);
                     });
                 }); else chain.writeSector(sec, data, function (e) {
                     if (e) return cb(e);
                     
                     data = data.slice(getSectorSize());
-                    if (data.length) _writeToChain(sec+1, 0, data, cb);
+                    if (data.length) _writeToChain(sec+1, 0, data);
                     else cb(null);
                 });
             }
-            _writeToChain(targetPos.sector, targetPos.offset, data, cb);
+            _writeToChain(targetPos.sector, targetPos.offset, data);
         }
         
         
@@ -521,7 +561,6 @@ exports.createFileSystem = function (volume) {
                     maxTail = 0;
                 function processNext(next) {
                     next = next(function (e, d, entryPos) {
-console.log("entry says", arguments);
                         if (e) cb(e);
                         else if (!d) cb(null, {tail:maxTail+1, target:entryPos});
                         else if (d._free) processNext(next);         // TODO: look for long enough reusable run
@@ -579,7 +618,7 @@ console.log("entry says", arguments);
                     });
                     
                     console.log("Writing", entriesData.length, "byte directory entry", d.target, "bytes into", dirChain);
-                    writeToChain(dirChain, d.targetSector, d.targetOffset, entriesData, function (e) {
+                    writeToChain(dirChain, d.target, entriesData, function (e) {
                         // TODO: if we get error, what/should we clean up?
                         if (e) cb(e);
                         else cb(null, openClusterChain(fileCluster));
