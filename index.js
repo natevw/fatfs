@@ -146,38 +146,84 @@ exports.createFileSystem = function (volume) {
             return firstDataSector + (n-2)*D.SecPerClus;
         }
         
-        function fetchFromFAT(clusterNum, cb) {
+        
+        // TODO: all this FAT manipulation is crazy inefficient! needs read caching *and* write caching
+        
+        function fatInfoForCluster(n) {
             var entryStruct = S.fatField[fatType],
-                FATOffset = (fatType === 'fat12') ? Math.floor(clusterNum/2) * entryStruct.size : clusterNum * entryStruct.size,
+                FATOffset = (fatType === 'fat12') ? Math.floor(n/2) * entryStruct.size : n * entryStruct.size,
                 SecNum = D.ResvdSecCnt + Math.floor(FATOffset / D.BytsPerSec);
                 EntOffset = FATOffset % D.BytsPerSec;
-            readFromSectorOffset(SecNum, EntOffset, entryStruct.size, function (e) {
+            return {sector:SecNum, offset:EntOffset, struct:entryStruct};
+        }
+        
+        function fetchFromFAT(clusterNum, cb) {
+            var info = fatInfoForCluster(clusterNum);
+            readFromSectorOffset(info.sector, info.offset, info.struct.size, function (e) {
                 if (e) return cb(e);
-                var entry = entryStruct.valueFromBytes(sectorBuffer), prefix;
+                var status = info.struct.valueFromBytes(sectorBuffer), prefix;
                 if (fatType === 'fat12') {
                     if (clusterNum % 2) {
-                        entry.NextCluster = (entry.NextCluster0a << 8) + entry.NextCluster0bc;
+                        status = (status.field0a << 8) + status.field0bc;
                     } else {
-                        entry.NextCluster = (entry.NextCluster1ab << 4) + entry.NextCluster1c;
+                        status = (status.field1ab << 4) + status.field1c;
                     }
-                    prefix = 0x00;
                 }
-                else if (fatType === 'fat16') {
-                    prefix = 0xff00;
-                } else if (fatType === 'fat32') {
-                    entry.NextCluster &= 0x0FFFFFFF;
-                    prefix = 0x0FFFFF00;
+                else if (fatType === 'fat32') {
+                    status &= 0x0FFFFFFF;
                 }
                 
-                var val = entry.NextCluster;
-                if (val === 0) cb(null, 'free');
-                else if (val === 1) cb(null, '-invalid-');
-                else if (val > prefix+0xF8) cb(null, 'eof');
-                else if (val === prefix+0xF7) cb(null, 'bad');
-                else if (val > prefix+0xF0) cb(null, 'reserved');
-                else cb(null, val);
+                var prefix = S.fatPrefix[fatType];
+                if (status === S.fatStat.free) cb(null, 'free');
+                else if (status === S.fatStat._undef) cb(null, '-invalid-');
+                else if (status > prefix+S.fatStat.eofMin) cb(null, 'eof');
+                else if (status === prefix+S.fatStat.bad) cb(null, 'bad');
+                else if (status > prefix+S.fatStat.rsvMin) cb(null, 'reserved');
+                else cb(null, status);
             });
         }
+        
+        function storeToFAT(clusterNum, status, cb) {
+            if (typeof status === 'string') {
+                status = S.fatStat[status];
+                status += S.fatPrefix[fatType];
+            }
+            var info = fatInfoForCluster(clusterNum);
+            if (fatType === 'fat12') readFromSectorOffset(info.sector, info.offset, info.struct.size, function (e) {
+                var value = info.struct.valueFromBytes(sectorBuffer);
+                if (clusterNum % 2) {
+                    value.field0a = status >>> 8;
+                    value.field0bc = status & 0xFF;
+                } else {
+                    value.field1ab = status >>> 4;
+                    value.field1c = status & 0x0F;
+                }
+                var entry = info.struct.bytesFromValue(value);
+                writeToSectorOffset(info.sector, info.offset, entry, cb);
+            }); else {
+                var entry = info.struct.bytesFromValue(status);
+                writeToSectorOffset(info.sector, info.offset, entry, cb);
+            }
+        }
+        
+        function allocateInFAT(hint, cb) {
+            if (typeof hint === 'function') {
+                cb = hint;
+                hint = 2;   // TODO: cache a better starting point?
+            }
+            function searchForFreeCluster(num, cb) {
+                if (num < countofClusters) fetchFromFAT(num, function (e, status) {
+                    if (e) cb(e);
+                    else if (status === 'free') cb(null, num);
+                    else searchForFreeCluster(num+1, cb);
+                }); else cb(S.err.NOSPC());     // TODO: try searching backwards from hint…
+            }
+            searchForFreeCluster(hint, function (e, clusterNum) {
+                if (e) cb(e);
+                else storeToFAT(clusterNum, 'eof', cb);
+            });
+        }
+        
         
         function nameChkSum(sum, c) {
             return ((sum & 1) ? 0x80 : 0) + (sum >>> 1) + c & 0xFF;
@@ -467,26 +513,32 @@ console.log("entry says", arguments);
                     console.log("Shortname amended to:", entries[0].Name);
                 }
                 
-                var nameBuf = S.dirEntry.fields['Name'].bytesFromValue(entries[0].Name),
-                    nameSum = reduceBuffer(nameBuf, 0, nameBuf.length, nameChkSum, 0);
-                entries.slice(1).forEach(function (entry) {
-                    entry.Chksum = nameSum;
-                });
-                entries.reverse();
-                
-                var entriesData = new Buffer(S.dirEntry.size*entries.length),
-                    dataOffset = {bytes:0};
-                entries.forEach(function (entry) {
-                    var entryType = ('Ord' in entry) ? S.longDirEntry : S.dirEntry;
-                    entryType.bytesFromValue(entry, entriesData, dataOffset);
-                });
-                console.log("WOULD WRITE:", entriesData.length, "byte directory entry", d.target, "bytes into", dirChain);
-                
-                // TODO: where is file's own chain? we should have included that in directory entry…
-                var fileChain = null;
-                writeToChain(dirChain, d.target, entriesData, function (e) {
-                    // TODO: if we get error, what/should we clean up?
-                    cb(e, fileChain);
+                // TODO: provide dirChain's cluster as hint
+                allocateInFAT(function (e,fileCluster) {
+                    if (e) return cb(e);
+                    
+                    var nameBuf = S.dirEntry.fields['Name'].bytesFromValue(entries[0].Name),
+                        nameSum = reduceBuffer(nameBuf, 0, nameBuf.length, nameChkSum, 0);
+                    entries[0].FstClusLO = fileCluster & 0xFFFF;
+                    entries[0].FstClusHI = fileCluster >>> 16;
+                    entries.slice(1).forEach(function (entry) {
+                        entry.Chksum = nameSum;
+                    });
+                    entries.reverse();
+                    
+                    var entriesData = new Buffer(S.dirEntry.size*entries.length),
+                        dataOffset = {bytes:0};
+                    entries.forEach(function (entry) {
+                        var entryType = ('Ord' in entry) ? S.longDirEntry : S.dirEntry;
+                        entryType.bytesFromValue(entry, entriesData, dataOffset);
+                    });
+                    
+                    console.log("Writing", entriesData.length, "byte directory entry", d.target, "bytes into", dirChain);
+                    writeToChain(dirChain, d.target, entriesData, function (e) {
+                        // TODO: if we get error, what/should we clean up?
+                        if (e) cb(e);
+                        else cb(null, openClusterChain(fileCluster));
+                    });
                 });
             });
         }

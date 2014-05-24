@@ -112,30 +112,39 @@ exports.longDirEntry = _.struct([
 if (exports.longDirEntry.size !== exports.dirEntry.size) throw Error("Structs ain't right!");
 
 exports.fatField = {
-    'fat12': _.struct([
-        _.ubit('NextCluster0bc', 8),
-        _.ubit('NextCluster1c', 4),
-        _.ubit('NextCluster0a', 4),
-        _.ubit('NextCluster1ab', 8),
+    'fat12': _.struct('Status', [
+        _.ubit('field0bc', 8),
+        _.ubit('field1c', 4),
+        _.ubit('field0a', 4),
+        _.ubit('field1ab', 8),
     ]),
-    'fat16': _.struct([
-        _.uint16le('NextCluster'),
-    ]),
-    'fat32': _.struct([
-        /* more properly, this is:
-        _.ubit('reserved', 4),
-        _.ubitLE('NextCluster', 28)
-        */
-        _.uint32le('NextCluster')
-    ]),
+    'fat16': _.uint16le('Status'),
+    'fat32': _.uint32le('Status')       // more properly this 4 bits reserved + uint28le
 };
+
+exports.fatPrefix = {
+    'fat12': 0x000,
+    'fat16': 0xff00,
+    'fat32': 0x0FFFFF00
+};
+
+exports.fatStat = {
+    free: 0x00,
+    _undef: 0x01,
+    rsvMin: 0xF0,
+    bad: 0xF7,
+    eofMin: 0xF8,
+    eof: 0xFF
+};
+
 
 var _errors = {
     IO: "Input/output error",
     NOENT: "No such file or directory",
     INVAL: "Invalid argument",
     EXIST: "File exists",
-    NAMETOOLONG: "Filename too long."
+    NAMETOOLONG: "Filename too long",
+    NOSPC: "No space left on device"
 };
 
 exports.err = {};
