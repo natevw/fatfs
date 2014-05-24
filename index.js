@@ -303,8 +303,23 @@ console.log("Writing sector", secNum, data, data.length);
             stats.mtime;
             stats.ctime;
             stats._firstCluster = (dirEntry.FstClusHI << 16) + dirEntry.FstClusLO
-            //stats._dbgOrig = dirEntry;
+            stats._entry = dirEntry;
             return stats;
+        }
+        
+        function updateEntry(dirEntry, newStats, cb) {
+            if (!dirEntry._pos || !dirEntry._pos.chain) throw Error("Entry source unknown!");
+            
+            var entryPos = dirEntry._pos,
+                chain = chainFromJSON(entryPos.chain),
+                newEntry = Object.create(dirEntry);
+            if ('size' in newStats) newEntry.FileSize = newStats.size;
+            if ('archive' in newStats) newEntry.Attr.archive = true;
+            if ('mtime' in newStats) ;      // TODO
+            if ('atime' in newStats) ;      // TODO
+            
+            var data = S.dirEntry.bytesFromValue(newEntry);
+            writeToChain(chain, entryPos, data, cb);
         }
         
         function findInDirectory(dirChain, name, cb) {
@@ -337,13 +352,14 @@ console.log("Writing sector", secNum, data, data.length);
             
             var secIdx = 0,
                 off = {bytes:0},
-                long = null;
+                long = null,
+                _chainInfo = dirChain.toJSON();
             function getNextEntry(cb) {
                 if (off.bytes >= getSectorSize()) {
                     secIdx += 1;
                     off.bytes -= getSectorSize();
                 }
-                var entryPos = {sector:secIdx, offset:off.bytes};
+                var entryPos = {chain:_chainInfo, sector:secIdx, offset:off.bytes};
                 getSectorBuffer(secIdx, function (e, sectorBuffer) {
                     if (e) return cb(S.err.IO());
                     else if (!sectorBuffer) return cb(null, null, entryPos);
@@ -354,13 +370,14 @@ console.log("Writing sector", secNum, data, data.length);
                     else if (signalByte === S.entryFreeFlag) {
                         off.bytes += S.dirEntry.size;
                         long = null;
-                        if (opts.includeFree) return cb(null, {_free:true}, entryPos);
+                        if (opts.includeFree) return cb(null, {_free:true,_pos:entryPos}, entryPos);
                         else return getNextEntry(cb);       // usually just skip these
                     }
                     
                     var attrByte = sectorBuffer[entryIdx+S.dirEntry.fields.Attr.offset],
                         entryType = (attrByte === S.longDirFlag) ? S.longDirEntry : S.dirEntry;
                     var entry = entryType.valueFromBytes(sectorBuffer, off);
+                    entry._pos = entryPos;
 //console.log("entry:", entry, secIdx, entryIdx);
                     if (entryType === S.longDirEntry) {
                         var firstEntry;
@@ -429,6 +446,10 @@ console.log("Writing sector", secNum, data, data.length);
                 var s = firstDataSector - rootDirSectors;
                 if (i < rootDirSectors) readSector(s+i, cb);
                 else _noData(cb);
+            };
+            
+            chain.toJSON = function () {
+                return {firstSector:firstSector, numSectors:numSectors};
             };
             
             return chain;
@@ -516,7 +537,17 @@ console.log("Writing sector", secNum, data, data.length);
             
             //chain.truncate
             
+            chain.toJSON = function () {
+                return {firstCluster:firstCluster};
+            };
+            
             return chain;
+        }
+        
+        function chainFromJSON(d) {
+            return ('numSectors' in d) ?
+                openSectorChain(d.firstSector, d.numSectors) :
+                openClusterChain(d.firstCluster);
         }
         
         function posFromOffset(off) {
@@ -525,6 +556,20 @@ console.log("Writing sector", secNum, data, data.length);
                 sector = (off - offset) / secSize;
             return {sector:sector, offset:offset};
         }
+        
+        function adjustedPos(pos, bytes) {
+            var _pos = {
+                chain: pos.chain,
+                sector: pos.sector,
+                offset: pos.offset
+            }, secSize = getSectorSize();
+            while (_pos.offset > secSize) {
+                _pos.sector += 1;
+                _pos.offset -= secSize;
+            }
+            return _pos;
+        }
+        
         
         function readFromChain(chain, targetPos, buffer, cb) {
             if (typeof targetPos === 'number') targetPos = posFromOffset(targetPos);
@@ -543,6 +588,7 @@ console.log("Writing sector", secNum, data, data.length);
             _readFromChain(targetPos.sector, targetPos.offset, 0);
         }
         
+        // TODO: should writeToChain give a partial `bytesWritten` in case of error?
         function writeToChain(chain, targetPos, data, cb) {
             if (typeof targetPos === 'number') targetPos = posFromOffset(targetPos);
             function _writeToChain(sec, off, data) {
@@ -657,6 +703,7 @@ console.log("Writing sector", secNum, data, data.length);
                         nameSum = reduceBuffer(nameBuf, 0, nameBuf.length, nameChkSum, 0);
                     mainEntry.FstClusLO = fileCluster & 0xFFFF;
                     mainEntry.FstClusHI = fileCluster >>> 16;
+                    mainEntry._pos = adjustedPos(d.target, S.dirEntry.size*(entries.length-1));
                     entries.slice(1).forEach(function (entry) {
                         entry.Chksum = nameSum;
                     });
@@ -674,7 +721,7 @@ console.log("Writing sector", secNum, data, data.length);
                     writeToChain(dirChain, d.target, entriesData, function (e) {
                         // TODO: if we get error, what/should we clean up?
                         if (e) cb(e);
-                        else cb(null, makeStat({}), openClusterChain(fileCluster));
+                        else cb(null, makeStat(mainEntry), openClusterChain(fileCluster));
                     });
                 });
             });
@@ -704,6 +751,7 @@ console.log("Looking in", chain, "for:", name);
         }
         
         fs._entryForPath = entryForPath;
+        fs._updateEntry = updateEntry;
         fs._writeToChain = writeToChain;
         fs._readFromChain = readFromChain;
         fs._addFile = addFile;
@@ -757,8 +805,12 @@ console.log("Looking in", chain, "for:", name);
         var _pos = (pos === null) ? _fd.pos : pos,
             _buf = buf.slice(off,off+len);
         fs._readFromChain(_fd.chain, _pos, _buf, function (e,bytes,slice) {
-            // NOTE: wrapped to return `buf` rather than `slice`…
-            cb(e,bytes,buf);
+            _fd.pos = _pos + bytes;
+            if (e || volume.noatime) finish(e);
+            else fs._updateEntry(_fd.stats._entry, {atime:new Date()}, finish);
+            function finish(e) {
+                cb(e,bytes,buf);
+            }
         });
     };
     
@@ -769,8 +821,13 @@ console.log("Looking in", chain, "for:", name);
         var _pos = (pos === null) ? _fd.pos : pos,
             _buf = buf.slice(off,off+len);
         fs._writeToChain(_fd.chain, _pos, _buf, function (e) {
-            // TODO: should writeToChain give a partial `bytesWritten` in case of error?
-            cb(e, len, buf);
+            _fd.pos = _pos + len;
+            var curDate = new Date(),
+                newSize = Math.max(_fd.stats.size, _fd.pos),
+                newInfo = {size:newSize,archive:true,atime:curDate,mtime:curDate};
+            fs._updateEntry(_fd.stats._entry, newInfo, function (ee) {
+                cb(e||ee, len, buf);
+            });
         });
     }
     
