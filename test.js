@@ -20,15 +20,15 @@ function startTests(imagePath) {
         fs = fatfs.createFileSystem(vol);
 setTimeout(function () {            // HACK: should wait for 'ready' event or something (not implemented)
 
-    fs.readFile("/TEST/FILE.TXT", function (e,d) {
-        if (e) console.error("Couldn't read file:", e);
-        else console.log("File contents of", d.length, "bytes:", d.toString());
-    });
-    
-//    fs.writeFile("/test/FILE.TXT2", "This is Zombocom", function (e,d) {
-//        if (e) console.error("Couldn't write file:", e);
-//        else console.log("Wrote it!");
+//    fs.readFile("/TEST/FILE.TXT", function (e,d) {
+//        if (e) console.error("Couldn't read file:", e);
+//        else console.log("File contents of", d.length, "bytes:", d.toString());
 //    });
+    
+    fs.writeFile("/test/FILE.TXT2", "This is Zombocom", function (e,d) {
+        if (e) console.error("Couldn't write file:", e);
+        else console.log("Wrote it!");
+    });
     
 }, 1e3);
 }

@@ -150,7 +150,7 @@ console.log("Writing sector", secNum, data, data.length);
         else volume.write(data, 0, secSize, secNum*secSize, cb);
     }
     
-    // TODO: rewrite these in terms of readSector/writeSector
+    // TODO: change 
     function readFromSectorOffset(secNum, offset, len, cb) {
         var secSize = getSectorSize();
         volume.read(sectorBuffer, 0, len, secNum*secSize+offset, cb);
@@ -750,17 +750,29 @@ console.log("Looking in", chain, "for:", name);
         else delayedCall(cb, null, _fd.stats);
     };
     
-    fs.read = function (fd, buffer, off, len, pos, cb) {
+    fs.read = function (fd, buf, off, len, pos, cb) {
         var _fd = fileDescriptors[fd];
-        if (!_fd) delayedCall(cb, S.err.BADF());
+        if (!_fd || !_fd.flags.read) delayedCall(cb, S.err.BADF());
         
         var _pos = (pos === null) ? _fd.pos : pos,
-            _buf = buffer.slice(off,off+len);
+            _buf = buf.slice(off,off+len);
         fs._readFromChain(_fd.chain, _pos, _buf, function (e,bytes,slice) {
-            // NOTE: wrapped to return `buffer` rather than `slice`…
-            cb(e,bytes,buffer);
+            // NOTE: wrapped to return `buf` rather than `slice`…
+            cb(e,bytes,buf);
         });
     };
+    
+    fs.write = function(fd, buf, off, len, pos, cb) {
+        var _fd = fileDescriptors[fd];
+        if (!_fd || !_fd.flags.write) delayedCall(cb, S.err.BADF());
+        
+        var _pos = (pos === null) ? _fd.pos : pos,
+            _buf = buf.slice(off,off+len);
+        fs._writeToChain(_fd.chain, _pos, _buf, function (e) {
+            // TODO: should writeToChain give a partial `bytesWritten` in case of error?
+            cb(e, len, buf);
+        });
+    }
     
     fs.close = function (fd, cb) {
         var _fd = fileDescriptors[fd];
@@ -768,24 +780,35 @@ console.log("Looking in", chain, "for:", name);
         else delayedCall(cb, fileDescriptors[fd] = null);
     };
     
+    
+    function _fdOperation(path, opts, fn, cb) {
+        fs.open(path, opts.flag, function (e,fd) {
+            if (e) cb(e);
+            else fs.fstat(fd, function (e,stat) {
+                if (e) return cb(e);
+                else fn(fd, function () {
+                    var ctx = this, args = arguments;
+                    fs.close(fd, function (closeErr) {
+                        cb.apply(this, args);
+                    });
+                });
+            });
+        });
+    }
+    
     fs.readFile = function (path, opts, cb) {
         if (typeof opts === 'function') {
             cb = opts;
             opts = {};
         }
-        fs.open(path, opts.flag||'r', function (e,fd) {
-            if (e) cb(e);
-            else fs.fstat(fd, function (e,stat) {
-                if (e) return cb(e);
-                var buffer = new Buffer(stat.size);
-                fs.read(fd, buffer, 0, buffer.length, null, function (e) {
-                    fs.close(fd, function (closeErr) {
-                        if (e) cb(e);
-                        else cb(null, (opts.encoding) ? buffer.toString(encoding) : buffer);
-                    });
-                });
+        opts.flag || (opts.flag = 'r');
+        _fdOperation(path, opts, function (fd, cb) {
+            var buffer = new Buffer(stat.size);
+            fs.read(fd, buffer, 0, buffer.length, null, function (e) {
+                if (e) cb(e);
+                else cb(null, (opts.encoding) ? buffer.toString(opts.encoding) : buffer);
             });
-        });
+        }, cb);
     };
     
     fs.writeFile = function (path, data, opts, cb) {
@@ -793,27 +816,11 @@ console.log("Looking in", chain, "for:", name);
             cb = opts;
             opts = {};
         }
-        // TODO: opts.flag (/opts.mode for readonly?)
-        if (typeof data === 'string') data = Buffer(data, opts.encoding);
-        fs._entryForPath(path, function (e,stats,chain) {
-console.log("_entryForPath says", e, stats, chain);
-            if (e && e.code !== 'NOENT') cb(e);
-            else if (e) {
-                if (stats.length !== 1) cb(e);
-                else fs._addFile(chain, stats[0], function (e,fileChain) {
-                    if (e) return cb(e);
-                    else writeFile(fileChain);
-                });
-            }
-            else writeFile(chain);
-            
-            function writeFile(fileChain) {
-                fs._writeToChain(fileChain, {sector:0,offset:0}, data, function () {
-                    // TODO: update stats w/size (and mtime/archive stuff…)
-                    cb.apply(this, arguments);
-                });
-            }
-        });
+        opts.flag || (opts.flag = 'w');
+        _fdOperation(path, opts, function (fd, cb) {
+            if (typeof data === 'string') data = new Buffer(data, opts.encoding || 'utf8');
+            fs.write(fd, data, 0, data.length, null, function (e) { cb(e); });
+        }, cb);
     };
     
     
