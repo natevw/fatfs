@@ -430,9 +430,10 @@ exports.createFileSystem = function (volume) {
                     maxTail = 0;
                 function processNext(next) {
                     next = next(function (e, d, entryPos) {
+console.log("entry says", arguments);
                         if (e) cb(e);
                         else if (!d) cb(null, {tail:maxTail+1, target:entryPos});
-                        else if (d._free) ;         // TODO: look for long enough reusable run
+                        else if (d._free) processNext(next);         // TODO: look for long enough reusable run
                         else if (d._name.toUpperCase() === matchName) return cb(S.err.EXIST());
                         else {
                             var dNum = 1,
