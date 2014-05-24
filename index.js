@@ -178,6 +178,7 @@ console.log("Writing sector", secNum, data, data.length);
         
         
         // TODO: all this FAT manipulation is crazy inefficient! needs read caching *and* write caching
+        // NOTE: the best place for cache might be in `volume` handler, though. add a `sync` method to that spec?
         
         function fatInfoForCluster(n) {
             var entryStruct = S.fatField[fatType],
@@ -651,6 +652,8 @@ console.log("Looking in", chain, "for:", name);
         }
         
         fs._chainForPath = chainForPath;
+        fs._writeToChain = writeToChain;
+        //fs._readFromChain = readFromChain;
         fs._addFile = addFile;
     });
     
@@ -698,13 +701,18 @@ console.log("_chainForPath says", e, stats, chain);
             if (e && e.code !== 'NOENT') cb(e);
             else if (e) {
                 if (stats.length !== 1) cb(e);
-                else fs._addFile(chain, stats[0], function (e,d) {
+                else fs._addFile(chain, stats[0], function (e,fileChain) {
                     if (e) return cb(e);
-                    else ;      // TODO: what?
+                    else writeFile(fileChain);
                 });
             }
-            else {
-                // TODO: write file
+            else writeFile(chain);
+            
+            function writeFile(fileChain) {
+                fs._writeToChain(fileChain, {sector:0,offset:0}, data, function () {
+                    // TODO: update stats w/size (and mtime/archive stuff…)
+                    cb.apply(this, arguments);
+                });
             }
         });
     };
