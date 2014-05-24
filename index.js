@@ -315,7 +315,7 @@ console.log("Writing sector", secNum, data, data.length);
                 off = {bytes:0},
                 long = null;
             function getNextEntry(cb) {
-                if (off.bytes >= getSectorSize()) {         // TODO: could dir entries cross sectors?!
+                if (off.bytes >= getSectorSize()) {
                     secIdx += 1;
                     off.bytes -= getSectorSize();
                 }
