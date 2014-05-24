@@ -36,6 +36,10 @@ Expected differences:
 
 ## "Block driver" API
 
+
+**NOTE**: this will likely be changing to something like `{readSector,writeSector,flush}` soon
+
+
 **TBD:** if we're going to support sync methods, we'll need sync versions too…
 **TBD:** probably need at least a `.size` (and `.blksize`?)
 
