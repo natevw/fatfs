@@ -721,7 +721,7 @@ console.log("Looking in", chain, "for:", name);
         
         var _fd = {flags:null,stats:null,chain:null,pos:0},
             f = parseFlags(flags);
-        if (!volume.write && f.write || f.create || f.truncate) return delayedCall(cb, S.err.ROFS());
+        if (!volume.write && (f.write || f.create || f.truncate)) return delayedCall(cb, S.err.ROFS());
         else _fd.flags = f;
         
         fs._entryForPath(path, function (e,stats,chain) {
