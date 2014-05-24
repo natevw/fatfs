@@ -147,6 +147,8 @@ var _errors = {
     NOSPC: "No space left on device",
     NOSYS: "Function not supported",
     ROFS: "ROFLCopter file system",
+    NOTDIR: "Not a directory",
+    BADF: "Bad file descriptor",
     _TODO: "Not implemented yet!"
 };
 

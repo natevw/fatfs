@@ -26,7 +26,7 @@ function parseFlags(flags) {
         case 'ax':  info = {read:false, write:true, create:true, append:true, exclusive:true}; break;
         case 'a+':  info = {read:true, write:true, create:true, append:true}; break;
         case 'ax+': info = {read:true, write:true, create:true, append:true, exclusive:true}; break;
-        default: throw Error("Uknown mode!");
+        default: throw Error("Uknown mode!");       // TODO: throw as `S.err.INVAL`
     }
     if (info.sync) throw Error("Mode not implemented.");    // TODO: what would this require of us?
     return info;
@@ -519,7 +519,32 @@ console.log("Writing sector", secNum, data, data.length);
             return chain;
         }
         
+        function posFromOffset(off) {
+            var secSize = getSectorSize(),
+                offset = off % secSize,
+                sector = (off - offset) / secSize;
+            return {sector:sector, offset:offset};
+        }
+        
+        function readFromChain(chain, targetPos, buffer, cb) {
+            if (typeof targetPos === 'number') targetPos = posFromOffset(targetPos);
+            function _readFromChain(sec, off, bufPos) {
+                chain.readSector(sec, function (e, secData) {
+                    if (e) return cb(e);
+                    else if (!secData) return cb(null, bufPos, buffer);
+                    
+                    var len = secData.length - off;
+                    secData.copy(buffer, bufPos, off, off+len);
+                    bufPos += len;
+                    if (bufPos < buffer.length) _readFromChain(sec+1, 0, bufPos);
+                    else cb(null, buffer.length, buffer);
+                });
+            }
+            _readFromChain(targetPos.sector, targetPos.offset, 0);
+        }
+        
         function writeToChain(chain, targetPos, data, cb) {
+            if (typeof targetPos === 'number') targetPos = posFromOffset(targetPos);
             function _writeToChain(sec, off, data) {
                 var incomplete = (off || data.length < getSectorSize());
                 if (incomplete) chain.readSector(sec, function (e, orig) {
@@ -548,15 +573,16 @@ console.log("Writing sector", secNum, data, data.length);
         
         
         function addFile(dirChain, name, cb) {
-            var entries = [],
+            var entries = [], mainEntry = null,
                 short = shortname(name);
-            entries.push({
+            entries.push(mainEntry = {
                 Name: {filename:short.basis[0], extension:short.basis[1]},
                 // TODO: finalize initial properties…
                 Attr: {directory:false},
                 FstClusHI: 0,
                 FstClusLO: 0,
-                FileSize: 0
+                FileSize: 0,
+                _name: name
             });
             if (1 || short.lossy) {         // HACK: always write long names until short.lossy more useful!
                 // name entries should be 0x0000-terminated and 0xFFFF-filled
@@ -583,7 +609,7 @@ console.log("Writing sector", secNum, data, data.length);
             
             function prepareForEntries(cb) {
                 var matchName = name.toUpperCase(),
-                    tailName = entries[0].Name,
+                    tailName = mainEntry.Name,
                     maxTail = 0;
                 function processNext(next) {
                     next = next(function (e, d, entryPos) {
@@ -615,22 +641,22 @@ console.log("Writing sector", secNum, data, data.length);
                 if (e) return cb(e);
                 
                 if (d.tail) {
-                    var name = entries[0].Name.filename,
+                    var name = mainEntry.Name.filename,
                         suffix = '~'+d.tail,
                         sufIdx = Math.min(name.indexOf(' '), name.length-suffix.length);
                     if (sufIdx < 0) return cb(S.err.NAMETOOLONG());         // TODO: would EXIST be more correct?
-                    entries[0].Name.filename = name.slice(0,sufIdx)+suffix+name.slice(sufIdx+suffix.length);
-                    console.log("Shortname amended to:", entries[0].Name);
+                    mainEntry.Name.filename = name.slice(0,sufIdx)+suffix+name.slice(sufIdx+suffix.length);
+                    console.log("Shortname amended to:", mainEntry.Name);
                 }
                 
                 // TODO: provide dirChain's cluster as hint
                 allocateInFAT(function (e,fileCluster) {
                     if (e) return cb(e);
                     
-                    var nameBuf = S.dirEntry.fields['Name'].bytesFromValue(entries[0].Name),
+                    var nameBuf = S.dirEntry.fields['Name'].bytesFromValue(mainEntry.Name),
                         nameSum = reduceBuffer(nameBuf, 0, nameBuf.length, nameChkSum, 0);
-                    entries[0].FstClusLO = fileCluster & 0xFFFF;
-                    entries[0].FstClusHI = fileCluster >>> 16;
+                    mainEntry.FstClusLO = fileCluster & 0xFFFF;
+                    mainEntry.FstClusHI = fileCluster >>> 16;
                     entries.slice(1).forEach(function (entry) {
                         entry.Chksum = nameSum;
                     });
@@ -648,22 +674,25 @@ console.log("Writing sector", secNum, data, data.length);
                     writeToChain(dirChain, d.target, entriesData, function (e) {
                         // TODO: if we get error, what/should we clean up?
                         if (e) cb(e);
-                        else cb(null, openClusterChain(fileCluster));
+                        else cb(null, makeStat({}), openClusterChain(fileCluster));
                     });
                 });
             });
         }
         
-        function chainForPath(path, cb) {
+        function entryForPath(path, cb) {
             var spets = absoluteSteps(path).reverse();
             function findNext(chain) {
                 var name = spets.pop();
 console.log("Looking in", chain, "for:", name);
                 findInDirectory(chain, name, function (e,stats) {
-                    if (e) cb(e, spets.concat(name), chain);
+                    if (e) cb(e, (spets.length) ? null : {_missingFile:name}, chain);
                     else {
                         var _chain = openClusterChain(stats._firstCluster);
-                        if (spets.length) findNext(_chain);
+                        if (spets.length) {
+                            if (stats.isDirectory()) findNext(_chain);
+                            else cb(S.err.NOTDIR());
+                        }
                         else cb(null, stats, _chain);
                     }
                 });
@@ -674,9 +703,9 @@ console.log("Looking in", chain, "for:", name);
             findNext(chain);
         }
         
-        fs._chainForPath = chainForPath;
+        fs._entryForPath = entryForPath;
         fs._writeToChain = writeToChain;
-        //fs._readFromChain = readFromChain;
+        fs._readFromChain = readFromChain;
         fs._addFile = addFile;
     });
     
@@ -686,58 +715,76 @@ console.log("Looking in", chain, "for:", name);
     
     fs.open = function (path, flags, mode, cb) {
         if (typeof mode === 'function') {
-            callback = mode;
+            cb = mode;
             mode = 0666;
         }
         
-        var fd = {flags:null,entry:null},
+        var _fd = {flags:null,stats:null,chain:null,pos:0},
             f = parseFlags(flags);
         if (!volume.write && f.write || f.create || f.truncate) return delayedCall(cb, S.err.ROFS());
-        else fd.flags = f;
+        else _fd.flags = f;
         
-        fs._entryForPath(path, function (e,fileEntry) {
-            // TODO: *here* is where create should happen if f.create
-            // TODO: also f.truncate would be done here too I suppose
-            if (e) cb(e);
-            else {
-                fd.entry = fileEntry;
-                cb(null, fileDescriptors.push(fd));
+        fs._entryForPath(path, function (e,stats,chain) {
+            if (e && !(e.code === 'NOENT' && f.create && stats)) cb(e);
+            else if (e) fs._addFile(chain, stats._missingFile, function (e,newStats,newChain) {
+                if (e) cb(e);
+                else finish(newStats, newChain);
+            });
+            else finish(stats,chain);
+            function finish(fileStats,fileChain) {
+                _fd.stats = fileStats;
+                _fd.chain = fileChain;
+                if (f.truncate && _fd.stats.size) {
+                    // TODO: set size of file to zero…
+                    cb(S.err._TODO());
+                }
+                // TODO: handle ISDIR/ACCES situations
+                else cb(null, fileDescriptors.push(_fd)-1);
             }
         });
     };
     
-    
-    
-    
-    fs.readdir = function (path, cb) {
-        var steps = absoluteSteps(path);
-        // TODO: implement
+    fs.fstat = function (fd, cb) {
+        var _fd = fileDescriptors[fd];
+        if (!_fd) delayedCall(cb, S.err.BADF());
+        else delayedCall(cb, null, _fd.stats);
     };
+    
+    fs.read = function (fd, buffer, off, len, pos, cb) {
+        var _fd = fileDescriptors[fd];
+        if (!_fd) delayedCall(cb, S.err.BADF());
+        
+        var _pos = (pos === null) ? _fd.pos : pos,
+            _buf = buffer.slice(off,off+len);
+        fs._readFromChain(_fd.chain, _pos, _buf, function (e,bytes,slice) {
+            // NOTE: wrapped to return `buffer` rather than `slice`…
+            cb(e,bytes,buffer);
+        });
+    };
+    
+    fs.close = function (fd, cb) {
+        var _fd = fileDescriptors[fd];
+        if (!_fd) delayedCall(cb, S.err.BADF());
+        else delayedCall(cb, fileDescriptors[fd] = null);
+    };
+    
     fs.readFile = function (path, opts, cb) {
         if (typeof opts === 'function') {
             cb = opts;
             opts = {};
         }
-        // TODO: opts.flag, opts.encoding
-        fs._chainForPath(path, function (e,stats,chain) {
+        fs.open(path, opts.flag||'r', function (e,fd) {
             if (e) cb(e);
-            else {
-console.log("have chain for file:", path, stats);
-                var fileBuffer = Buffer(stats.size),
-                    bufferPos = 0;
-                function readUntilFull(i) {
-                    chain.readSector(i, function (e, d) {
-                        if (e) return cb(e);
-                        else if (d === 'eof') return cb(S.err.IO());
-                        
-                        d.copy(fileBuffer, bufferPos);
-                        bufferPos += d.length;
-                        if (bufferPos < fileBuffer.length) readUntilFull(i+1);
-                        else cb(null, fileBuffer);
+            else fs.fstat(fd, function (e,stat) {
+                if (e) return cb(e);
+                var buffer = new Buffer(stat.size);
+                fs.read(fd, buffer, 0, buffer.length, null, function (e) {
+                    fs.close(fd, function (closeErr) {
+                        if (e) cb(e);
+                        else cb(null, (opts.encoding) ? buffer.toString(encoding) : buffer);
                     });
-                }
-                readUntilFull(0);
-            }
+                });
+            });
         });
     };
     
@@ -748,8 +795,8 @@ console.log("have chain for file:", path, stats);
         }
         // TODO: opts.flag (/opts.mode for readonly?)
         if (typeof data === 'string') data = Buffer(data, opts.encoding);
-        fs._chainForPath(path, function (e,stats,chain) {
-console.log("_chainForPath says", e, stats, chain);
+        fs._entryForPath(path, function (e,stats,chain) {
+console.log("_entryForPath says", e, stats, chain);
             if (e && e.code !== 'NOENT') cb(e);
             else if (e) {
                 if (stats.length !== 1) cb(e);
