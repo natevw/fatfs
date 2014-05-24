@@ -443,8 +443,11 @@ console.log("Writing sector", secNum, data, data.length);
                             if (e) return cb(e);
                             
                             cache.push(newCluster);
-                            if (clustersNeeded) addCluster(clustersNeeded-1, newCluster);
-                            else {
+                            if (clustersNeeded) {
+                                // TODO: zero-fill contents of newCluster!
+                                addCluster(clustersNeeded-1, newCluster);
+                            } else {
+                                // NOTE: we don't zero-fill last cluster; we assume it will be written next
                                 cache.push('eof');
                                 cb(null, newCluster);
                             }
@@ -487,8 +490,7 @@ console.log("Writing sector", secNum, data, data.length);
                 });
             };
             
-            //chain.addSectors
-            //chain.removeSectors
+            //chain.truncate
             
             return chain;
         }
