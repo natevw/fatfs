@@ -554,7 +554,7 @@ console.log("Writing sector", secNum, data, data.length);
                     Name2: paddedName.slice(off, off+=S_lde_f.Name2.size/2),
                     Name3: paddedName.slice(off, off+=S_lde_f.Name3.size/2)
                 });
-                entries[entries.length - 1].Ord &= S.lastLongFlag;
+                entries[entries.length - 1].Ord |= S.lastLongFlag;
             }
             
             function prepareForEntries(cb) {
