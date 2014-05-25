@@ -280,7 +280,16 @@ console.log("Writing sector", secNum, data, data.length);
         
         // TODO: return an actual `instanceof fs.Stat` somehow?
         function makeStat(dirEntry) {
-            var stats = {};
+            var stats = {},
+                _ = {};
+            
+            stats._ = function (k) {
+                return _[k];
+            }
+            _.entry = dirEntry,
+            _.firstCluster = (dirEntry.FstClusHI << 16) + dirEntry.FstClusLO;;
+            
+            
             stats.isFile = function () {
                 return (!dirEntry.Attr.volume_id && !dirEntry.Attr.directory);
             };
@@ -302,8 +311,6 @@ console.log("Writing sector", secNum, data, data.length);
             stats.atime;
             stats.mtime;
             stats.ctime;
-            stats._firstCluster = (dirEntry.FstClusHI << 16) + dirEntry.FstClusLO
-            stats._entry = dirEntry;
             return stats;
         }
         
@@ -735,7 +742,7 @@ console.log("Looking in", chain, "for:", name);
                 findInDirectory(chain, name, function (e,stats) {
                     if (e) cb(e, (spets.length) ? null : {_missingFile:name}, chain);
                     else {
-                        var _chain = openClusterChain(stats._firstCluster);
+                        var _chain = openClusterChain(stats._('firstCluster'));
                         if (spets.length) {
                             if (stats.isDirectory()) findNext(_chain);
                             else cb(S.err.NOTDIR());
@@ -807,7 +814,7 @@ console.log("Looking in", chain, "for:", name);
         fs._readFromChain(_fd.chain, _pos, _buf, function (e,bytes,slice) {
             _fd.pos = _pos + bytes;
             if (e || volume.noatime) finish(e);
-            else fs._updateEntry(_fd.stats._entry, {atime:new Date()}, finish);
+            else fs._updateEntry(_fd.stats._('entry'), {atime:new Date()}, finish);
             function finish(e) {
                 cb(e,bytes,buf);
             }
@@ -825,7 +832,7 @@ console.log("Looking in", chain, "for:", name);
             var curDate = new Date(),
                 newSize = Math.max(_fd.stats.size, _fd.pos),
                 newInfo = {size:newSize,archive:true,atime:curDate,mtime:curDate};
-            fs._updateEntry(_fd.stats._entry, newInfo, function (ee) {
+            fs._updateEntry(_fd.stats._('entry'), newInfo, function (ee) {
                 cb(e||ee, len, buf);
             });
         });
