@@ -841,17 +841,22 @@ console.log("Looking in", chain, "for:", name);
     function _fdOperation(path, opts, fn, cb) {
         fs.open(path, opts.flag, function (e,fd) {
             if (e) cb(e);
-            else fs.fstat(fd, function (e,stat) {
-                if (e) return cb(e);
-                else fn(fd, function () {
-                    var ctx = this, args = arguments;
-                    fs.close(fd, function (closeErr) {
-                        cb.apply(this, args);
-                    });
+            else fn(fd, function () {
+                var ctx = this, args = arguments;
+                fs.close(fd, function (closeErr) {
+                    cb.apply(this, args);
                 });
             });
         });
     }
+    
+    fs.stat = fs.lstat = function (path, cb) {
+        _fdOperation(path, {flag:'r'}, function (fd, cb) {
+            fs.fstat(fd, cb);
+        }, cb);
+    };
+    
+    
     
     fs.readFile = function (path, opts, cb) {
         if (typeof opts === 'function') {
@@ -860,10 +865,15 @@ console.log("Looking in", chain, "for:", name);
         }
         opts.flag || (opts.flag = 'r');
         _fdOperation(path, opts, function (fd, cb) {
-            var buffer = new Buffer(stat.size);
-            fs.read(fd, buffer, 0, buffer.length, null, function (e) {
-                if (e) cb(e);
-                else cb(null, (opts.encoding) ? buffer.toString(opts.encoding) : buffer);
+            fs.fstat(fd, function (e,stat) {
+                if (e) return cb(e);
+                else {
+                    var buffer = new Buffer(stat.size);
+                    fs.read(fd, buffer, 0, buffer.length, null, function (e) {
+                        if (e) cb(e);
+                        else cb(null, (opts.encoding) ? buffer.toString(opts.encoding) : buffer);
+                    });
+                }
             });
         }, cb);
     };
