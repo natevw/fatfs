@@ -211,6 +211,8 @@ console.log("Writing sector", secNum, data, data.length);
         // TODO: all this FAT manipulation is crazy inefficient! needs read caching *and* write caching
         // NOTE: the best place for cache might be in `volume` handler, though. add a `sync` method to that spec?
         
+        // TODO: how should we handle redundant FATs? mirror every write? just ignore completely? copy-on-eject? (how do other OSes handle?)
+        
         function fatInfoForCluster(n) {
             var entryStruct = S.fatField[fatType],
                 FATOffset = (fatType === 'fat12') ? Math.floor(n/2) * entryStruct.size : n * entryStruct.size,
