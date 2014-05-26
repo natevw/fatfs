@@ -1,5 +1,13 @@
 var S = require("./structs.js");
 
+
+// flag for WORKAROUND: https://github.com/tessel/beta/issues/380
+var workaroundTessel380 = function () {
+    var b = Buffer([0]),
+        s = b.slice(0);
+    return ((s[0] = 0xFF) !== b[0]);
+}();
+
 function absoluteSteps(path) {
     var steps = [];
     path.split('/').forEach(function (str) {
@@ -812,6 +820,7 @@ console.log("Looking in", chain, "for:", name);
         var _pos = (pos === null) ? _fd.pos : pos,
             _buf = buf.slice(off,off+len);
         fs._readFromChain(_fd.chain, _pos, _buf, function (e,bytes,slice) {
+            if (workaroundTessel380) _buf.copy(buf,off);        // WORKAROUND: https://github.com/tessel/beta/issues/380
             _fd.pos = _pos + bytes;
             if (e || volume.noatime) finish(e);
             else fs._updateEntry(_fd.stats._('entry'), {atime:new Date()}, finish);
