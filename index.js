@@ -158,17 +158,6 @@ console.log("Writing sector", secNum, data, data.length);
         else volume.write(data, 0, secSize, secNum*secSize, cb);
     }
     
-    // TODO: change 
-    function readFromSectorOffset(secNum, offset, len, cb) {
-        var secSize = getSectorSize();
-        volume.read(sectorBuffer, 0, len, secNum*secSize+offset, cb);
-    }
-    function writeToSectorOffset(secNum, offset, data, cb) {
-        var secSize = getSectorSize();
-        if (!volume.write) throw Error("Read-only filesystem");
-        else volume.write(data, 0, data.length, secNum*secSize+offset, cb);
-    }
-    
     // TODO: when/where to do this stuff? do we need a 'ready' event… :-(
     setSectorSize(512);
     readSector(0, function (e) {
@@ -213,6 +202,10 @@ console.log("Writing sector", secNum, data, data.length);
         
         // TODO: how should we handle redundant FATs? mirror every write? just ignore completely? copy-on-eject? (how do other OSes handle?)
         
+        
+        var fatChain = openSectorChain(D.ResvdSecCnt, FATSz);
+        
+        
         function fatInfoForCluster(n) {
             var entryStruct = S.fatField[fatType],
                 FATOffset = (fatType === 'fat12') ? Math.floor(n/2) * entryStruct.size : n * entryStruct.size,
@@ -223,9 +216,9 @@ console.log("Writing sector", secNum, data, data.length);
         
         function fetchFromFAT(clusterNum, cb) {
             var info = fatInfoForCluster(clusterNum);
-            readFromSectorOffset(info.sector, info.offset, info.struct.size, function (e) {
+            readFromChain(fatChain, info, info.struct.size, function (e,n,d) {
                 if (e) return cb(e);
-                var status = info.struct.valueFromBytes(sectorBuffer), prefix;
+                var status = info.struct.valueFromBytes(d), prefix;
                 if (fatType === 'fat12') {
                     if (clusterNum % 2) {
                         status = (status.field0a << 8) + status.field0bc;
@@ -253,8 +246,11 @@ console.log("Writing sector", secNum, data, data.length);
                 status += S.fatPrefix[fatType];
             }
             var info = fatInfoForCluster(clusterNum);
-            if (fatType === 'fat12') readFromSectorOffset(info.sector, info.offset, info.struct.size, function (e) {
-                var value = info.struct.valueFromBytes(sectorBuffer);
+            
+            
+            
+            if (fatType === 'fat12') readFromChain(fatChain, info, info.struct.size, function (e,n,d) {
+                var value = info.struct.valueFromBytes(d);
                 if (clusterNum % 2) {
                     value.field0a = status >>> 8;
                     value.field0bc = status & 0xFF;
@@ -263,10 +259,11 @@ console.log("Writing sector", secNum, data, data.length);
                     value.field1c = status & 0x0F;
                 }
                 var entry = info.struct.bytesFromValue(value);
-                writeToSectorOffset(info.sector, info.offset, entry, cb);
+                writeToChain(fatChain, info, entry, cb);
+                
             }); else {
                 var entry = info.struct.bytesFromValue(status);
-                writeToSectorOffset(info.sector, info.offset, entry, cb);
+                writeToChain(fatChain, info, entry, cb);
             }
         }
         
@@ -590,6 +587,7 @@ console.log("Writing sector", secNum, data, data.length);
         
         function readFromChain(chain, targetPos, buffer, cb) {
             if (typeof targetPos === 'number') targetPos = posFromOffset(targetPos);
+            if (typeof buffer === 'number') buffer = new Buffer(buffer);
             function _readFromChain(sec, off, bufPos) {
                 chain.readSector(sec, function (e, secData) {
                     if (e) return cb(e);
