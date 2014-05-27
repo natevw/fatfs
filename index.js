@@ -1,137 +1,5 @@
-var S = require("./structs.js");
-
-
-// flag for WORKAROUND: https://github.com/tessel/beta/issues/380
-var workaroundTessel380 = function () {
-    var b = Buffer([0]),
-        s = b.slice(0);
-    return ((s[0] = 0xFF) !== b[0]);
-}();
-
-function absoluteSteps(path) {
-    var steps = [];
-    path.split('/').forEach(function (str) {
-        // NOTE: these should actually be fine, just wasteful…
-        if (str === '..') steps.pop();
-        else if (str && str !== '.') steps.push(str);
-    });
-    return steps.map(longname);
-}
-
-function parseFlags(flags) {
-    // read, write, append, create, truncate, exclusive
-    var info;           // NOTE: there might be more clever ways to "parse", but…
-    switch (flags) {
-        case 'r':   info = {read:true, write:false, create:false}; break;
-        case 'r+':  info = {read:true, write:true, create:false}; break;
-        case 'rs':  info = {read:true, write:false, create:false, sync:true}; break;
-        case 'rs+': info = {read:true, write:true, create:false, sync:true}; break;
-        case 'w':   info = {read:false, write:true, create:true, truncate:true}; break;
-        case 'wx':  info = {read:false, write:true, create:false, truncate:true}; break;
-        case 'w+':  info = {read:true, write:true, create:true, truncate:true}; break;
-        case 'wx+': info = {read:true, write:true, create:true, exclusive:true}; break;
-        case 'a':   info = {read:false, write:true, create:true, append:true}; break;
-        case 'ax':  info = {read:false, write:true, create:true, append:true, exclusive:true}; break;
-        case 'a+':  info = {read:true, write:true, create:true, append:true}; break;
-        case 'ax+': info = {read:true, write:true, create:true, append:true, exclusive:true}; break;
-        default: throw Error("Uknown mode!");       // TODO: throw as `S.err.INVAL`
-    }
-    if (info.sync) throw Error("Mode not implemented.");    // TODO: what would this require of us?
-    return info;
-}
-
-
-// TODO: these are great candidates for special test coverage!
-var _snInvalid = /[^A-Z0-9$%'-_@~`!(){}^#&.]/g;         // NOTE: '.' is not valid but we split it away
-function shortname(name) {
-    var lossy = false;
-    // TODO: support preservation of case for otherwise non-lossy name!
-    name = name.toUpperCase().replace(/ /g, '').replace(/^\.+/, '');
-    name = name.replace(_snInvalid, function () {
-        lossy = true;
-        return '_';
-    });
-    
-    var parts = name.split('.'),
-        basis3 = parts.pop(),
-        basis8 = parts.join('');
-    if (!parts.length) {
-        basis8 = basis3;
-        basis3 = '   ';
-    }
-    if (basis8.length > 8) {
-        basis8 = basis8.slice(0,8);
-        // NOTE: technically, spec's "lossy conversion" flag is NOT set by excess length.
-        //       But since lossy conversion and truncated names both need a numeric tail…
-        lossy = true;
-    } else while (basis8.length < 8) basis8 += ' ';
-    if (basis3.length > 3) {
-        basis3 = basis3.slice(0,3);
-        lossy = true;
-    } else while (basis3.length < 3) basis3 += ' ';
-    return {basis:[basis8,basis3], lossy:lossy};
-}
-//shortname("autoexec.bat") => {basis:['AUTOEXEC','BAT'],lossy:false}
-//shortname("autoexecutable.batch") => {basis:['AUTOEXEC','BAT'],lossy:true}
-// TODO: OS X stores `shortname("._.Trashes")` as ['~1', 'TRA'] — should we?
-
-var _lnInvalid = /[^a-zA-Z0-9$%'-_@~`!(){}^#&.+,;=[\] ]/g;
-function longname(name) {
-    name = name.trim().replace(/\.+$/, '').replace(_lnInvalid, function (c) {
-        if (c.length > 1) throw Error("Internal problem: unexpected match length!");
-        if (c.charCodeAt(0) > 127) return c;
-        else throw Error("Invalid character "+JSON.stringify(c)+" in name.");
-        lossy = true;
-        return '_';
-    });
-    if (name.length > 255) throw Error("Name is too long.");
-    return name;
-}
-
-function nameChkSum(sum, c) {
-    return ((sum & 1) ? 0x80 : 0) + (sum >>> 1) + c & 0xFF;
-}
-
-// WORKAROUND: https://github.com/tessel/beta/issues/335
-function reduceBuffer(buf, start, end, fn, res) {
-    // NOTE: does not handle missing `res` like Array.prototype.reduce would
-    for (var i = start; i < end; ++i) {
-        res = fn(res, buf[i]);
-    }
-    return res;
-}
-
-/* comparing C rounding trick from FAT spec with Math.ceil
-function tryBoth(d) {
-    var a = ((D.RootEntCnt * 32) + (D.BytsPerSec - 1)) / D.BytsPerSec >>> 0,
-        b = Math.ceil((D.RootEntCnt * 32) / D.BytsPerSec);
-    if (b !== a) console.log("try", b, a, (b === a) ? '' : '*');
-    return (b === a);
-}
-// BytsPerSec — "may take on only the following values: 512, 1024, 2048 or 4096"
-[512, 1024, 2048, 4096].forEach(function (bps) {
-    // RootEntCnt — "a count that when multiplied by 32 results in an even multiple of BPB_BytsPerSec"
-    for (var evenMultiplier = 0; evenMultiplier < 1024*1024*16; evenMultiplier += 2) {
-        var rec = (bps * evenMultiplier) / 32;
-        tryBoth({RootEntCnt:rec, BytsPerSec:bps});
-    }
-});
-*/
-
-function hex(n, ff) {
-    return (1+ff+n).toString(16).slice(1);
-}
-
-function delayedCall(fn) {
-    var ctx = this,
-        args = Array.prototype.slice.call(arguments, 1);
-    process.nextTick(function () {
-        fn.apply(ctx, args);
-    });
-}
-
-function _noData(cb) { delayedCall(cb, null, null); }
-
+var S = require("./structs.js"),
+    _ = require("./helpers.js");
 
 exports.createFileSystem = function (volume) {
 
@@ -428,9 +296,8 @@ console.log("Writing sector", secNum, data, data.length);
                     } else if (!entry.Attr.volume_id) {
                         var bestName = null;
                         if (long && long.name) {
-                            var _nf = S.dirEntry.fields['Name'],
-                                pos = entryIdx + _nf.offset,
-                                sum = reduceBuffer(sectorBuffer, pos, pos+_nf.size, nameChkSum);
+                            var pos = entryIdx + S.dirEntry.fields['Name'].offset,
+                                sum = _.checksumName(sectorBuffer, pos);
                             if (sum === long.sum) bestName = long.name;
                         }
                         if (!bestName) {
@@ -457,13 +324,16 @@ console.log("Writing sector", secNum, data, data.length);
             return iter;
         }
         
+        // NOTE: used [with mixed feelings] by chains, broken out to mark uses
+        function _pastEOF(cb) { _.delayedCall(cb, null, null); }
+        
         function openSectorChain(firstSector, numSectors) {
             var chain = {_dbgSector:firstSector};
             
             chain.readSector = function (i, cb) {
                 var s = firstDataSector - rootDirSectors;
                 if (i < rootDirSectors) readSector(s+i, cb);
-                else _noData(cb);
+                else _pastEOF(cb);
             };
             
             chain.toJSON = function () {
@@ -540,7 +410,7 @@ console.log("Writing sector", secNum, data, data.length);
                 firstSectorOfClusterAtIdx(c, false, function (e,s) {
                     if (e) cb(e);
                     else if (s) readSector(s+o, cb);
-                    else _noData(cb);
+                    else _pastEOF(cb);
                 });
             };
             
@@ -639,7 +509,7 @@ console.log("Writing sector", secNum, data, data.length);
         
         function addFile(dirChain, name, cb) {
             var entries = [], mainEntry = null,
-                short = shortname(name);
+                short = _.shortname(name);
             entries.push(mainEntry = {
                 Name: {filename:short.basis[0], extension:short.basis[1]},
                 // TODO: finalize initial properties…
@@ -719,7 +589,7 @@ console.log("Writing sector", secNum, data, data.length);
                     if (e) return cb(e);
                     
                     var nameBuf = S.dirEntry.fields['Name'].bytesFromValue(mainEntry.Name),
-                        nameSum = reduceBuffer(nameBuf, 0, nameBuf.length, nameChkSum, 0);
+                        nameSum = _.checksumName(nameBuf);
                     mainEntry.FstClusLO = fileCluster & 0xFFFF;
                     mainEntry.FstClusHI = fileCluster >>> 16;
                     mainEntry._pos = adjustedPos(d.target, S.dirEntry.size*(entries.length-1));
@@ -747,7 +617,7 @@ console.log("Writing sector", secNum, data, data.length);
         }
         
         function entryForPath(path, cb) {
-            var spets = absoluteSteps(path).reverse();
+            var spets = _.absoluteSteps(path).reverse();
             function findNext(chain) {
                 var name = spets.pop();
 console.log("Looking in", chain, "for:", name);
@@ -787,8 +657,8 @@ console.log("Looking in", chain, "for:", name);
         }
         
         var _fd = {flags:null,stats:null,chain:null,pos:0},
-            f = parseFlags(flags);
-        if (!volume.write && (f.write || f.create || f.truncate)) return delayedCall(cb, S.err.ROFS());
+            f = _.parseFlags(flags);
+        if (!volume.write && (f.write || f.create || f.truncate)) return _.delayedCall(cb, S.err.ROFS());
         else _fd.flags = f;
         
         fs._entryForPath(path, function (e,stats,chain) {
@@ -813,18 +683,18 @@ console.log("Looking in", chain, "for:", name);
     
     fs.fstat = function (fd, cb) {
         var _fd = fileDescriptors[fd];
-        if (!_fd) delayedCall(cb, S.err.BADF());
-        else delayedCall(cb, null, _fd.stats);
+        if (!_fd) _.delayedCall(cb, S.err.BADF());
+        else _.delayedCall(cb, null, _fd.stats);
     };
     
     fs.read = function (fd, buf, off, len, pos, cb) {
         var _fd = fileDescriptors[fd];
-        if (!_fd || !_fd.flags.read) delayedCall(cb, S.err.BADF());
+        if (!_fd || !_fd.flags.read) _.delayedCall(cb, S.err.BADF());
         
         var _pos = (pos === null) ? _fd.pos : pos,
             _buf = buf.slice(off,off+len);
         fs._readFromChain(_fd.chain, _pos, _buf, function (e,bytes,slice) {
-            if (workaroundTessel380) _buf.copy(buf,off);        // WORKAROUND: https://github.com/tessel/beta/issues/380
+            if (_.workaroundTessel380) _buf.copy(buf,off);        // WORKAROUND: https://github.com/tessel/beta/issues/380
             _fd.pos = _pos + bytes;
             if (e || volume.noatime) finish(e);
             else fs._updateEntry(_fd.stats._('entry'), {atime:new Date()}, finish);
@@ -836,7 +706,7 @@ console.log("Looking in", chain, "for:", name);
     
     fs.write = function(fd, buf, off, len, pos, cb) {
         var _fd = fileDescriptors[fd];
-        if (!_fd || !_fd.flags.write) delayedCall(cb, S.err.BADF());
+        if (!_fd || !_fd.flags.write) _.delayedCall(cb, S.err.BADF());
         
         var _pos = (pos === null) ? _fd.pos : pos,
             _buf = buf.slice(off,off+len);
@@ -854,8 +724,8 @@ console.log("Looking in", chain, "for:", name);
     
     fs.close = function (fd, cb) {
         var _fd = fileDescriptors[fd];
-        if (!_fd) delayedCall(cb, S.err.BADF());
-        else delayedCall(cb, fileDescriptors[fd] = null);
+        if (!_fd) _.delayedCall(cb, S.err.BADF());
+        else _.delayedCall(cb, fileDescriptors[fd] = null);
     };
     
     
@@ -876,8 +746,6 @@ console.log("Looking in", chain, "for:", name);
             fs.fstat(fd, cb);
         }, cb);
     };
-    
-    
     
     fs.readFile = function (path, opts, cb) {
         if (typeof opts === 'function') {
