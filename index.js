@@ -134,6 +134,10 @@ function _noData(cb) { delayedCall(cb, null, null); }
 
 
 exports.createFileSystem = function (volume) {
+
+    // TODO: how will operations be made consistent? (e.g. conflicting modifications to FAT12 entries, etc.)
+
+
     var fs = {};
     
     var sectorBuffer;               // TODO: get rid of this global (must be used/copied by cb before returning)
@@ -841,6 +845,7 @@ console.log("Looking in", chain, "for:", name);
             var curDate = new Date(),
                 newSize = Math.max(_fd.stats.size, _fd.pos),
                 newInfo = {size:newSize,archive:true,atime:curDate,mtime:curDate};
+            // TODO: figure out why this silently fails on FAT12
             fs._updateEntry(_fd.stats._('entry'), newInfo, function (ee) {
                 cb(e||ee, len, buf);
             });
