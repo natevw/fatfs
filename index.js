@@ -25,12 +25,13 @@ exports.createFileSystem = function (volume) {
     // NOTE: we really don't share namespace, but avoid first three anyway…
     var fileDescriptors = [null,null,null];
     
-    fs.open = function (path, flags, mode, cb, _) { cb = GROUP(cb, function () {
+    fs.open = function (path, flags, mode, cb, _n_) { 
         if (typeof mode === 'function') {
+            _n_ = cb;
             cb = mode;
             mode = 0666;
         }
-        
+    cb = GROUP(cb, function () {
         var _fd = {flags:null,stats:null,chain:null,pos:0},
             f = _.parseFlags(flags);
         if (!volume.write && (f.write || f.create || f.truncate)) return _.delayedCall(cb, S.err.ROFS());
@@ -54,15 +55,15 @@ exports.createFileSystem = function (volume) {
                 else cb(null, fileDescriptors.push(_fd)-1);
             }
         });
-    }, (_ === '_nested_')); };
+    }, (_n_ === '_nested_')); };
     
-    fs.fstat = function (fd, cb, _) { cb = GROUP(cb, function () {
+    fs.fstat = function (fd, cb, _n_) { cb = GROUP(cb, function () {
         var _fd = fileDescriptors[fd];
         if (!_fd) _.delayedCall(cb, S.err.BADF());
         else _.delayedCall(cb, null, _fd.stats);
-    }, (_ === '_nested_')); };
+    }, (_n_ === '_nested_')); };
     
-    fs.read = function (fd, buf, off, len, pos, cb, _) { cb = GROUP(cb, function () {
+    fs.read = function (fd, buf, off, len, pos, cb, _n_) { cb = GROUP(cb, function () {
         var _fd = fileDescriptors[fd];
         if (!_fd || !_fd.flags.read) _.delayedCall(cb, S.err.BADF());
         
@@ -77,9 +78,9 @@ exports.createFileSystem = function (volume) {
                 cb(e,bytes,buf);
             }
         });
-    }, (_ === '_nested_')); };
+    }, (_n_ === '_nested_')); };
     
-    fs.write = function (fd, buf, off, len, pos, cb, _) { cb = GROUP(cb, function () {
+    fs.write = function (fd, buf, off, len, pos, cb, _n_) { cb = GROUP(cb, function () {
         var _fd = fileDescriptors[fd];
         if (!_fd || !_fd.flags.write) _.delayedCall(cb, S.err.BADF());
         
@@ -95,7 +96,7 @@ exports.createFileSystem = function (volume) {
                 cb(e||ee, len, buf);
             });
         });
-    }, (_ === '_nested_')); };
+    }, (_n_ === '_nested_')); };
     
     fs.close = function (fd, cb) {
         var _fd = fileDescriptors[fd];
