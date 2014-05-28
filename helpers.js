@@ -19,7 +19,12 @@ exports.absoluteSteps = function (path) {
 
 exports.parseFlags = function (flags) {
     // read, write, append, create, truncate, exclusive
-    var info;           // NOTE: there might be more clever ways to "parse", but…
+    var info, _dir;           // NOTE: there might be more clever ways to "parse", but…
+    if (flags[0] === '\\') {
+        // internal flag used internally to `fs.open` directories without `S.err.ISDIR()`
+        flags = flags.slice(1);
+        _dir = true;
+    }
     switch (flags) {
         case 'r':   info = {read:true, write:false, create:false}; break;
         case 'r+':  info = {read:true, write:true, create:false}; break;
@@ -36,6 +41,7 @@ exports.parseFlags = function (flags) {
         default: throw Error("Uknown mode!");       // TODO: throw as `S.err.INVAL`
     }
     if (info.sync) throw Error("Mode not implemented.");    // TODO: what would this require of us?
+    if (_dir) info._openDir = true;
     return info;
 };
 

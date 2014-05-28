@@ -24,6 +24,12 @@ setTimeout(function () {            // HACK: should wait for 'ready' event or so
         FILENAME = "Simple File.txt",
         TEXTDATA = "Hello world!";
     
+    fs.readdir(BASE_DIR, function (e,arr) {
+        if (e) throw e;
+        else console.log("Files are:", arr);
+    });
+    return;
+    
     fs.mkdir(BASE_DIR, function (e) {
         if (e) throw e;
         var file = [BASE_DIR,FILENAME].join('/');

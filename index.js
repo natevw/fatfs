@@ -17,6 +17,7 @@ exports.createFileSystem = function (volume) {
         if (e) throw e;
         vol = require("./vol.js").init(volume, bootSector);
         bootSector = null;          // allow GC
+        fs._dirIterator = dir.iterator.bind(dir);
         fs._entryForPath = dir.entryForPath.bind(dir, vol);
         fs._updateEntry = dir.updateEntry.bind(dir, vol);
         fs._addFile = dir.addFile.bind(dir, vol);
@@ -79,6 +80,26 @@ exports.createFileSystem = function (volume) {
             }
         });
     }, (_n_ === '_nested_')); };
+    
+    fs._readdir = function (fd, cb, _n_)  { cb = GROUP(cb, function () {
+        var _fd = fileDescriptors[fd];
+        if (!_fd) _.delayedCall(cb, S.err.BADF());
+        else {
+            var entryNames = [],
+                getNextEntry = fs._dirIterator(_fd.chain);
+            function processNext() {
+                getNextEntry(function (e,d) {
+                    if (e) cb(e);
+                    else if (!d) cb(null, entryNames);
+                    else {
+                        if (d._name !== "." && d._name !== "..") entryNames.push(d._name);
+                        processNext();
+                    }
+                });
+            }
+            processNext();
+        }
+    }, (_n_ === '_nested_')); }
     
     fs.write = function (fd, buf, off, len, pos, cb, _n_) { cb = GROUP(cb, function () {
         var _fd = fileDescriptors[fd];
@@ -152,6 +173,12 @@ exports.createFileSystem = function (volume) {
         _fdOperation(path, opts, function (fd, cb) {
             if (typeof data === 'string') data = new Buffer(data, opts.encoding || 'utf8');
             fs.write(fd, data, 0, data.length, null, function (e) { cb(e); }, '_nested_');
+        }, cb);
+    };
+    
+    fs.readdir = function (path, cb) {
+        _fdOperation(path, {flag:'\\r'}, function (fd, cb) {
+            fs._readdir(fd, cb, '_nested_');
         }, cb);
     };
     

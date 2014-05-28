@@ -233,7 +233,7 @@ dir.entryForPath = function (vol, path, cb) {
     var spets = _.absoluteSteps(path).reverse();
     function findNext(chain) {
         var name = spets.pop();
-console.log("Looking in", chain, "for:", name);
+//console.log("Looking in", chain, "for:", name);
         dir._findInDirectory(vol, chain, name, function (e,stats) {
             if (e) cb(e, (spets.length) ? null : {_missingFile:name}, chain);
             else {
