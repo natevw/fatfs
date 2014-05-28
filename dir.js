@@ -5,15 +5,16 @@ var dir = exports;
 
 dir.iterator = function (dirChain, opts) {
     opts || (opts = {});
-    var _cachedBuf = null;
+    
+    var cache = {buffer:null, n: null};
     function getSectorBuffer(n, cb) {
-        if (_cachedBuf && n === _cachedBuf._n) cb(null, _cachedBuf);
-        else _cachedBuf = null, dirChain.readSector(n, function (e,d) {
+        if (cache.n === n) cb(null, cache.buffer);
+        else cache.n = cache.buffer = null, dirChain.readSector(n, function (e,d) {
             if (e) cb(e);
             else if (!d) return cb(null, null);
             else {
-                d._n = n;
-                _cachedBuf = d;
+                cache.n = n;
+                cache.buffer = d;
                 getSectorBuffer(n, cb);
             }
         });
