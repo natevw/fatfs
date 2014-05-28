@@ -149,7 +149,14 @@ exports.clusterChain = function (vol, firstCluster, _parent) {
         });
     };
     
-    // TODO: chain.truncate
+    chain.truncate = function (i, cb) {
+        extendCacheToInclude(i, function (e,c) {
+            if (e) cb(e);
+            else if (c === 'eof') cb(null, null);
+            else cb(null, vol._firstSectorOfCluster(c));
+        });
+    };
+    
     
     chain.toJSON = function () {
         return {firstCluster:firstCluster};
@@ -171,7 +178,9 @@ exports.sectorChain = function (vol, firstSector, numSectors) {
         else _.delayedCall(cb, S.err.NOSPC());
     };
     
-    // TODO: chain.truncate
+    chain.truncate = function (i, cb) {
+        _.delayedCall(cb, S.err.INVAL());
+    };
     
     chain.toJSON = function () {
         return {firstSector:firstSector, numSectors:numSectors};

@@ -53,8 +53,15 @@ exports.createFileSystem = function (volume) {
                 _fd.stats = fileStats;
                 _fd.chain = fileChain;
                 if (f.truncate && _fd.stats.size) {
-                    // TODO: set size of file to zero…
-                    cb(S.err._TODO());
+                    var curDate = new Date();
+                    fs._updateEntry(_fd.stats._('entry'), {size:0,archive:true,atime:curDate,mtime:curDate}, function (e, newEntry) {
+console.log("NEW ENTRY????", newEntry);
+                        if (e) cb(e);
+                        else _fd.chain.truncate(1, function (e) {
+                            if (e) cb(e);
+                            else finish(_.makeStat(vol, newEntry), _fd.chain);
+                        });
+                    });
                 }
                 else cb(null, fileDescriptors.push(_fd)-1);
             }

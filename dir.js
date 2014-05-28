@@ -107,12 +107,14 @@ dir.iterator = function (dirChain, opts) {
     return iter;
 };
 
-// TODO: expand this for more use from `dir.addFile`?
-function updateEntry(entry, info) {
-    if (typeof info === 'number') info = {firstCluster:info};
-    if ('firstCluster' in info) {
-        entry.FstClusLO = info.firstCluster & 0xFFFF;
-        entry.FstClusHI = info.firstCluster >>> 16;
+function _updateEntry(entry, newStats) {
+    if ('size' in newStats) entry.FileSize = newStats.size;
+    if ('archive' in newStats) entry.Attr.archive = true;           // TODO: also via newStats.mode?
+    if ('mtime' in newStats) ;      // TODO
+    if ('atime' in newStats) ;      // TODO
+    if ('firstCluster' in newStats) {
+        entry.FstClusLO = newStats.firstCluster & 0xFFFF;
+        entry.FstClusHI = newStats.firstCluster >>> 16;
     }
     return entry;
 }
@@ -124,10 +126,10 @@ dir.init = function (vol, dirChain, cb) {
     initialCluster.fill(0);
     function writeEntry(name, clusterNum) {
         while (name.length < 8) name += " ";
-        S.dirEntry.bytesFromValue(updateEntry({
+        S.dirEntry.bytesFromValue(_updateEntry({
             Name: {filename:name, extension:"   "},
             Attr: {directory:true}
-        }, clusterNum), initialCluster, entriesOffset);
+        }, {firstCluster:clusterNum}), initialCluster, entriesOffset);
     }
     if (!isRootDir) {
         writeEntry(".", dirChain.toJSON().firstCluster);
@@ -223,7 +225,7 @@ dir.addFile = function (vol, dirChain, name, opts, cb) {
             
             var nameBuf = S.dirEntry.fields['Name'].bytesFromValue(mainEntry.Name),
                 nameSum = _.checksumName(nameBuf);
-            updateEntry(mainEntry, {firstCluster:fileCluster});
+            _updateEntry(mainEntry, {firstCluster:fileCluster});
             mainEntry._pos = _.adjustedPos(d.target, S.dirEntry.size*(entries.length-1));
             entries.slice(1).forEach(function (entry) {
                 entry.Chksum = nameSum;
@@ -286,13 +288,11 @@ dir.updateEntry = function (vol, dirEntry, newStats, cb) {
     
     var entryPos = dirEntry._pos,
         chain = vol.chainFromJSON(entryPos.chain),          // TODO: fix
-        newEntry = Object.create(dirEntry);
-    if ('size' in newStats) newEntry.FileSize = newStats.size;
-    if ('archive' in newStats) newEntry.Attr.archive = true;
-    if ('mtime' in newStats) ;      // TODO
-    if ('atime' in newStats) ;      // TODO
-    
-    var data = S.dirEntry.bytesFromValue(newEntry);
-//console.log("UPDATING ENTRY", newStats, entryPos, data);
-    chain.writeToPosition(entryPos, data, cb);
+        newEntry = _updateEntry(_.extend({}, dirEntry), newStats),
+        data = S.dirEntry.bytesFromValue(newEntry);
+//console.log("UPDATING ENTRY", newStats, newEntry, entryPos, data);
+    chain.writeToPosition(entryPos, data, function (e) {
+        if (e) cb(e);
+        else cb(null, newEntry);
+    });
 };
