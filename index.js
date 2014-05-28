@@ -110,7 +110,7 @@ exports.createFileSystem = function (volume) {
             else fn(fd, function () {
                 var ctx = this, args = arguments;
                 fs.close(fd, function (closeErr) {
-                    cb.apply(this, args);
+                    cb.apply(ctx, args);
                 }, '_nested_');
             });
         }, '_nested_');
