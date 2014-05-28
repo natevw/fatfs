@@ -55,7 +55,6 @@ exports.createFileSystem = function (volume) {
                 if (f.truncate && _fd.stats.size) {
                     var curDate = new Date();
                     fs._updateEntry(_fd.stats._('entry'), {size:0,archive:true,atime:curDate,mtime:curDate}, function (e, newEntry) {
-console.log("NEW ENTRY????", newEntry);
                         if (e) cb(e);
                         else _fd.chain.truncate(1, function (e) {
                             if (e) cb(e);
