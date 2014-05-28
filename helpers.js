@@ -37,7 +37,7 @@ exports.parseFlags = function (flags) {
     }
     if (info.sync) throw Error("Mode not implemented.");    // TODO: what would this require of us?
     return info;
-}
+};
 
 
 // TODO: these are great candidates for special test coverage!
@@ -69,7 +69,7 @@ exports.shortname = function (name) {
         lossy = true;
     } else while (basis3.length < 3) basis3 += ' ';
     return {basis:[basis8,basis3], lossy:lossy};
-}
+};
 //shortname("autoexec.bat") => {basis:['AUTOEXEC','BAT'],lossy:false}
 //shortname("autoexecutable.batch") => {basis:['AUTOEXEC','BAT'],lossy:true}
 // TODO: OS X stores `shortname("._.Trashes")` as ['~1', 'TRA'] — should we?
@@ -85,7 +85,7 @@ exports.longname = function (name) {
     });
     if (name.length > 255) throw Error("Name is too long.");
     return name;
-}
+};
 
 function nameChkSum(sum, c) {
     return ((sum & 1) ? 0x80 : 0) + (sum >>> 1) + c & 0xFF;
@@ -104,7 +104,7 @@ exports.checksumName = function (buf,off) {
     off || (off = 0);
     var len = S.dirEntry.fields['Name'].size;
     return reduceBuffer(buf, off, off+len, nameChkSum, 0);
-}
+};
 
 
 /* comparing C rounding trick from FAT spec with Math.ceil
@@ -126,7 +126,7 @@ function tryBoth(d) {
 
 exports.fmtHex = function (n, ff) {
     return (1+ff+n).toString(16).slice(1);
-}
+};
 
 exports.delayedCall = function (fn) {
     var ctx = this,
@@ -134,4 +134,54 @@ exports.delayedCall = function (fn) {
     process.nextTick(function () {
         fn.apply(ctx, args);
     });
-}
+};
+
+// TODO: return an actual `instanceof fs.Stat` somehow?
+exports.makeStat = function (vol, dirEntry) {
+    var stats = {},
+        _ = {};
+    
+    stats._ = function (k) {
+        return _[k];
+    }
+    _.entry = dirEntry,
+    _.firstCluster = (dirEntry.FstClusHI << 16) + dirEntry.FstClusLO;;
+    
+    
+    stats.isFile = function () {
+        return (!dirEntry.Attr.volume_id && !dirEntry.Attr.directory);
+    };
+    stats.isDirectory = function () {
+        return dirEntry.Attr.directory;
+    };
+    // TODO: are these all correct? (especially block/char)
+    stats.isBlockDevice = function () { return true; }
+    stats.isCharacterDevice = function () { return false; }
+    stats.isSymbolicLink = function () { return false; }
+    stats.isFIFO = function () { return false; }
+    stats.isSocket = function () { return false; }
+    stats.size = dirEntry.FileSize;
+    stats.blksize = vol._sectorsPerCluster*vol._sectorSize;
+    
+    // TODO: more infos!
+    // …
+    stats.blocks;
+    stats.atime;
+    stats.mtime;
+    stats.ctime;
+    return stats;
+};
+
+
+exports.adjustedPos = function (pos, bytes) {
+    var _pos = {
+        chain: pos.chain,
+        sector: pos.sector,
+        offset: pos.offset
+    }, secSize = pos.chain.sectorSize;
+    while (_pos.offset > secSize) {
+        _pos.sector += 1;
+        _pos.offset -= secSize;
+    }
+    return _pos;
+};
