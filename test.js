@@ -37,39 +37,40 @@ if (e) console.error(e.stack);
             assert(!e, "No error from fs.writeFile");
             fs.readdir(BASE_DIR, function (e, arr) {
                 assert(!e, "Still no error from fs.readdir");
+console.log("FILES", arr);
                 assert(arr.length === 1, "Test directory contains a single file.");
                 assert(arr[0] === FILENAME, "Filename is correct.");
                 
                 fs.stat(file, function (e,d) {
                     assert(!e, "No error from fs.stat");
-                    asssert(d.isFile() === true, "Result is a file…");
-                    asssert(d.isDirectory() === false, "…and not a directory.");
+                    assert(d.isFile() === true, "Result is a file…");
+                    assert(d.isDirectory() === false, "…and not a directory.");
                     assert(d.size === Buffer.byteLength(TEXTDATA), "Size matches length of content written.");
                 });
                 fs.readFile(file, {encoding:'utf8'}, function (e, d) {
                     assert(!e, "No error from fs.readFile");
                     assert(d === TEXTDATA, "Data matches what was written.");
                 });
-            });
-        });
-        // now, overwrite the same file and make sure that goes well too
-        fs.writeFile(file, Buffer([0x42]), function (e) {
-            assert(!e, "Still no error from fs.writeFile");
-            fs.readdir(BASE_DIR, function (e, arr) {
-                assert(!e, "No error from fs.readdir");
-                assert(arr.length === 1, "Test directory still contains a single file.");
-                assert(arr[0] === FILENAME, "Filename still correct.");
-                fs.stat(file, function (e,d) {
-                    assert(!e, "Still no error from fs.stat");
-                    asssert(d.isFile() === true, "Result is still a file…");
-                    asssert(d.isDirectory() === false, "…and not a directory.");
-                    assert(d.size === 1, "Size matches length of now-truncated content.");
-                });
-                fs.readFile(file, function (e, d) {
-                    assert(!e, "Still no error from fs.readFile");
-                    assert(Buffer.isBuffer(d), "Result without encoding is a buffer.");
-                    assert(d.length === 1, "Buffer is correct size.");
-                    assert(d[0] === 0x42, "Buffer content is correct.");
+                // now, overwrite the same file and make sure that goes well too
+                fs.writeFile(file, Buffer([0x42]), function (e) {
+                    assert(!e, "Still no error from fs.writeFile");
+                    fs.readdir(BASE_DIR, function (e, arr) {
+                        assert(!e, "No error from fs.readdir");
+                        assert(arr.length === 1, "Test directory still contains a single file.");
+                        assert(arr[0] === FILENAME, "Filename still correct.");
+                        fs.stat(file, function (e,d) {
+                            assert(!e, "Still no error from fs.stat");
+                            assert(d.isFile() === true, "Result is still a file…");
+                            assert(d.isDirectory() === false, "…and not a directory.");
+                            assert(d.size === 1, "Size matches length of now-truncated content.");
+                        });
+                        fs.readFile(file, function (e, d) {
+                            assert(!e, "Still no error from fs.readFile");
+                            assert(Buffer.isBuffer(d), "Result without encoding is a buffer.");
+                            assert(d.length === 1, "Buffer is correct size.");
+                            assert(d[0] === 0x42, "Buffer content is correct.");
+                        });
+                    });
                 });
             });
         });
