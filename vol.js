@@ -8,10 +8,10 @@ exports.init = function (volume, bootSector) {
     var isFAT16 = bootSector.readUInt16LE(S.boot16.fields['FATSz16'].offset),
         bootStruct = (isFAT16) ? S.boot16 : S.boot32,
         BS = bootStruct.valueFromBytes(bootSector);
+//console.log(BS);
     bootSector = null;      // allow GC
     if (!BS.BytsPerSec) throw Error("This looks like an ExFAT volume! (unsupported)");
-    
-//console.log(BS);
+    else if (BS.BytsPerSec !== volume.sectorSize) throw Error("Sector size mismatch with FAT table.");
     
     var FATSz = (isFAT16) ? BS.FATSz16 : BS.FATSz32,
         rootDirSectors = Math.ceil((BS.RootEntCnt * 32) / BS.BytsPerSec),
@@ -20,7 +20,7 @@ exports.init = function (volume, bootSector) {
         dataSec = totSec - firstDataSector,
         countofClusters = Math.floor(dataSec / BS.SecPerClus);
     // avoid corrupting sectors from other partitions or whatnot
-    if (totSec > volume.totalSectors) throw Error("Volume size mismatch!");
+    if (totSec > volume.numSectors) throw Error("Volume size mismatch!");
     
     var fatType;
     if (countofClusters < 4085) {
@@ -42,20 +42,17 @@ exports.init = function (volume, bootSector) {
     };
     
     vol._readSector = function (secNum, cb) {
-        var secSize = vol._sectorSize,
-            sectorBuffer = new Buffer(secSize);
-        volume.read(sectorBuffer, 0, secSize, secNum*secSize, function (e) {
-            cb(e, sectorBuffer);
-        });
+        if (secNum < volume.numSectors) volume.readSector(secNum, cb);
+        else throw Error("Invalid sector number!");
     };
     
     vol._writeSector = function (secNum, data, cb) {
 //console.log("_writeSector of", data.length, "bytes to sector", secNum);
-        var secSize = vol._sectorSize;
         // NOTE: these are internal assertions, public API will get proper `S.err`s
-        if (data.length !== secSize) throw Error("Must write complete sector");
-        else if (!volume.write) throw Error("Read-only filesystem");
-        else volume.write(data, 0, secSize, secNum*secSize, cb);
+        if (data.length !== volume.sectorSize) throw Error("Buffer does not match sector size");
+        else if (!volume.writeSector) throw Error("Read-only filesystem");
+        else if (secNum < volume.numSectors) volume.writeSector(secNum, data, cb);
+        else throw Error("Invalid sector number!");
     };
     
     function fatInfoForCluster(n) {

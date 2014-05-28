@@ -34,38 +34,58 @@ Expected differences:
 - watch/watchFile will be low priority
 
 
-## "Block driver" API
+## "Volume driver" API
+
+To use 'fatfs', you must provide a driver object with the following properties/methods:
+
+* `driver.sectorSize` — number of bytes per sector on this device
+* `driver.numSectors` — count of sectors available on this media
+* `driver.readSector(n, cb)` — returns the requested block to `cb(e, data)`
+* `driver.writeSector(n, data, cb)` — (optional) writes the data and notifies `cb(e)`
+
+If you do not provide a `writeSector` method, then `fatfs` will work in readonly mode. Pretty simple, eh? And the 'fatfs' module makes a good effort to check the parameters passed to your driver methods!
+
+**TBD:** document 'noatime' property or whatever final public way of handling that may be…
+**TBD:** to facilitate proper cache handling, this module might add an optional `driver.flush(cb)` method at some point in the future.
 
 
-**NOTE**: this will likely be changing to something like `{readSector,writeSector,flush}` soon
 
-
-**TBD:** if we're going to support sync methods, we'll need sync versions too…
-**TBD:** probably need at least a `.size` (and `.blksize`?)
-
-Basically you just need to provide an object with two methods, `read` and `write`. These should behave like the node.js [fs.read](http://nodejs.org/api/fs.html#fs_fs_read_fd_buffer_offset_length_position_callback) and [fs.write](http://nodejs.org/api/fs.html#fs_fs_write_fd_buffer_offset_length_position_callback) methods. They will *always* be called with an explicit position, so you do not need to keep track.
-
-If you do not provide a `write` method, then `fatfs` will work in readonly mode.
-
-For example:
+Here's an example taken from code used to run this module's own tests:
 
 ```js
-// NOTE: this assumes image has no partition table
-//       …if it did, you'd need to translate positions
-var fs = require('fs'),
-    fd = fs.openSync("image", 'r+'),
-    ro = true;
+// NOTE: this assumes image at `path` has no partition table.
+//       If it did, you'd need to translate positions, natch…
+var fs = require('fs');
 
-var exampleDriver = {
-    read: fs.read.bind(fs, fd),
-    write: (ro) ? fs.write.bind(fs, fd) : null
+exports.createDriverSync = function (path, opts) {
+    opts || (opts = {});
+    
+    var secSize = 512,
+        ro = opts.readOnly || false,
+        fd = fs.openSync(path, (ro) ? 'r' : 'r+'),
+        s = fs.fstatSync(fd);
+    
+    return {
+        sectorSize: secSize,
+        numSectors: s.size / secSize,
+        readSector: function (n, cb) {
+            fs.read(fd, Buffer(secSize), 0, secSize, n*secSize, function (e,n,d) {
+                cb(e,d);
+            });
+        },
+        writeSector: (ro) ? null : function (n, data, cb) {
+            fs.write(fd, data, 0, secSize, n*secSize, function (e) {
+                cb(e);
+            });
+        }
+    };
 };
 ```
 
 
 ## License
 
-© 2014 Nathan Vander Wilt
+© 2014 Nathan Vander Wilt.
 Funding for this work was provided by Technical Machine, Inc.
 
 Reuse under your choice of:

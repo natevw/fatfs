@@ -2,7 +2,7 @@ var fifolock = require('fifolock'),
     S = require("./structs.js"),
     _ = require("./helpers.js");
 
-exports.createFileSystem = function (volume) {
+exports.createFileSystem = function (volume, bootSector) {
     var fs = {},
         vol = null,
         dir = require("./dir.js"),
@@ -11,10 +11,14 @@ exports.createFileSystem = function (volume) {
     
     var GROUP = q.TRANSACTION_WRAPPER;
     
-    // TODO: have our own caller pass in, or fire 'ready' event when done…
-    var bootSector = new Buffer(512);
-    volume.read(bootSector, 0, bootSector.length, 0, function (e) {
+    if (bootSector) init(bootSector);
+    else volume.readSector(0, function (e,d) {
+        // TODO: emit events like a decent chap… (if this interface is to be documented/public)
         if (e) throw e;
+        else init(d);       
+    });
+    
+    function init(bootSector) {
         vol = require("./vol.js").init(volume, bootSector);
         bootSector = null;          // allow GC
         fs._dirIterator = dir.iterator.bind(dir);
@@ -22,7 +26,7 @@ exports.createFileSystem = function (volume) {
         fs._updateEntry = dir.updateEntry.bind(dir, vol);
         fs._addFile = dir.addFile.bind(dir, vol);
         fs._initDir = dir.init.bind(dir, vol);
-    });
+    }
     
     // NOTE: we really don't share namespace, but avoid first three anyway…
     var fileDescriptors = [null,null,null];
@@ -36,7 +40,7 @@ exports.createFileSystem = function (volume) {
     cb = GROUP(cb, function () {
         var _fd = {flags:null,stats:null,chain:null,pos:0},
             f = _.parseFlags(flags);
-        if (!volume.write && (f.write || f.create || f.truncate)) return _.delayedCall(cb, S.err.ROFS());
+        if (!volume.writeSector && (f.write || f.create || f.truncate)) return _.delayedCall(cb, S.err.ROFS());
         else _fd.flags = f;
         
         fs._entryForPath(path, function (e,stats,chain) {
