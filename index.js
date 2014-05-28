@@ -1,17 +1,15 @@
-var S = require("./structs.js"),
+var fifolock = require('fifolock'),
+    S = require("./structs.js"),
     _ = require("./helpers.js");
 
-var S = require("./structs.js");
-S.boot16.fields['FATSz16'].offset
-
-
 exports.createFileSystem = function (volume) {
-    // TODO: how will operations be made consistent? (e.g. conflicting modifications to FAT12 entries, etc.)
-    
     var fs = {},
         vol = null,
         dir = require("./dir.js"),
-        c = require("./chains.js");
+        c = require("./chains.js"),
+        q = fifolock();
+    
+    var GROUP = q.TRANSACTION_WRAPPER;
     
     // TODO: have our own caller pass in, or fire 'ready' event when done…
     var bootSector = new Buffer(512);
@@ -27,7 +25,7 @@ exports.createFileSystem = function (volume) {
     // NOTE: we really don't share namespace, but avoid first three anyway…
     var fileDescriptors = [null,null,null];
     
-    fs.open = function (path, flags, mode, cb) {
+    fs.open = function (path, flags, mode, cb, _) { cb = GROUP(cb, function () {
         if (typeof mode === 'function') {
             cb = mode;
             mode = 0666;
@@ -56,15 +54,15 @@ exports.createFileSystem = function (volume) {
                 else cb(null, fileDescriptors.push(_fd)-1);
             }
         });
-    };
+    }, (_ === '_nested_')); };
     
-    fs.fstat = function (fd, cb) {
+    fs.fstat = function (fd, cb, _) { cb = GROUP(cb, function () {
         var _fd = fileDescriptors[fd];
         if (!_fd) _.delayedCall(cb, S.err.BADF());
         else _.delayedCall(cb, null, _fd.stats);
-    };
+    }, (_ === '_nested_')); };
     
-    fs.read = function (fd, buf, off, len, pos, cb) {
+    fs.read = function (fd, buf, off, len, pos, cb, _) { cb = GROUP(cb, function () {
         var _fd = fileDescriptors[fd];
         if (!_fd || !_fd.flags.read) _.delayedCall(cb, S.err.BADF());
         
@@ -79,9 +77,9 @@ exports.createFileSystem = function (volume) {
                 cb(e,bytes,buf);
             }
         });
-    };
+    }, (_ === '_nested_')); };
     
-    fs.write = function(fd, buf, off, len, pos, cb) {
+    fs.write = function (fd, buf, off, len, pos, cb, _) { cb = GROUP(cb, function () {
         var _fd = fileDescriptors[fd];
         if (!_fd || !_fd.flags.write) _.delayedCall(cb, S.err.BADF());
         
@@ -97,7 +95,7 @@ exports.createFileSystem = function (volume) {
                 cb(e||ee, len, buf);
             });
         });
-    }
+    }, (_ === '_nested_')); };
     
     fs.close = function (fd, cb) {
         var _fd = fileDescriptors[fd];
@@ -106,21 +104,21 @@ exports.createFileSystem = function (volume) {
     };
     
     
-    function _fdOperation(path, opts, fn, cb) {
+    function _fdOperation(path, opts, fn, cb) { cb = GROUP(cb, function () {
         fs.open(path, opts.flag, function (e,fd) {
             if (e) cb(e);
             else fn(fd, function () {
                 var ctx = this, args = arguments;
                 fs.close(fd, function (closeErr) {
                     cb.apply(this, args);
-                });
+                }, '_nested_');
             });
-        });
-    }
+        }, '_nested_');
+    }); }
     
     fs.stat = fs.lstat = function (path, cb) {
         _fdOperation(path, {flag:'r'}, function (fd, cb) {
-            fs.fstat(fd, cb);
+            fs.fstat(fd, cb, '_nested_');
         }, cb);
     };
     
@@ -138,9 +136,9 @@ exports.createFileSystem = function (volume) {
                     fs.read(fd, buffer, 0, buffer.length, null, function (e) {
                         if (e) cb(e);
                         else cb(null, (opts.encoding) ? buffer.toString(opts.encoding) : buffer);
-                    });
+                    }, '_nested_');
                 }
-            });
+            }, '_nested_');
         }, cb);
     };
     
@@ -152,7 +150,7 @@ exports.createFileSystem = function (volume) {
         opts.flag || (opts.flag = 'w');
         _fdOperation(path, opts, function (fd, cb) {
             if (typeof data === 'string') data = new Buffer(data, opts.encoding || 'utf8');
-            fs.write(fd, data, 0, data.length, null, function (e) { cb(e); });
+            fs.write(fd, data, 0, data.length, null, function (e) { cb(e); }, '_nested_');
         }, cb);
     };
     
