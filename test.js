@@ -20,24 +20,74 @@ function startTests(imagePath) {
         fs = fatfs.createFileSystem(vol);
 setTimeout(function () {            // HACK: should wait for 'ready' event or something (not implemented)
 
-//    fs.stat("/TEST/FILE.TXT", function (e,d) {
-//        if (e) console.error("Couldn't stat file:", e);
-//        else console.log("File info:", d);
-//    });
+    var BASE_DIR = "/fat_test",
+        FILENAME = "Simple File.txt",
+        TEXTDATA = "Hello world!";
     
-//    fs.readFile("/TEST/FILE.TXT", function (e,d) {
-//        if (e) console.error("Couldn't read file:", e);
-//        else console.log("File contents of", d.length, "bytes:", d.toString());
-//    });
-    
-    fs.writeFile("/test/FILE.TXT2", "This is Zombocom", function (e,d) {
-        if (e) console.error("Couldn't write file:", e);
-        else console.log("Wrote it!");
+    fs.mkdir(BASE_DIR, function (e) {
+        if (e) throw e;
+        var file = [BASE_DIR,FILENAME].join('/');
+        fs.writeFile(file, TEXTDATA, function (e) {
+            assert(!e, "No error from fs.writeFile");
+            fs.readdir(BASE_DIR, function (e, arr) {
+                assert(!e, "No error from fs.readdir");
+                assert(arr.length === 1, "Test directory contains a single file.");
+                assert(arr[0] === FILENAME, "Filename is correct.");
+                
+                fs.stat(file, function (e,d) {
+                    assert(!e, "No error from fs.stat");
+                    asssert(d.isFile() === true, "Result is a file…");
+                    asssert(d.isDirectory() === false, "…and not a directory.");
+                    assert(d.size === Buffer.byteLength(TEXTDATA), "Size matches length of content written.");
+                });
+                fs.readFile(file, {encoding:'utf8'}, function (e, d) {
+                    assert(!e, "No error from fs.readFile");
+                    assert(d === TEXTDATA, "Data matches what was written.");
+                });
+            });
+        });
+        
+        var file2 = [BASE_DIR,FILENAME+"2"].join('/'),
+            outStream = fs.createWriteStream(file2);
+        var outStreamOpened = false;
+        outStream.on('open', function () {
+            outStreamOpened = true;
+        });
+        setTimeout(function () {
+            assert(outStreamOpened, "outStream fired 'open' event in a timely fashion.");
+        }, 1e3);
+        outStream.write(TEXTDATA+"\n");
+        outStream.write("Ο καλύτερος χρόνος να φυτευτεί ένα \ud83c\udf31 είναι δέκα έτη πριν.");
+        outStream.write("La vez del segundo mejor ahora está.\n");
+        for (var i = 0; i < 1024+42; ++i) outStream.write("123456789\n");
+        outStream.write("JavaScript how do they work\n");
+        outStream.write("The end, almost.\n");
+        outStream.end(TEXTDATA);
+        var outStreamFinished = false;
+        outStream.on('finish', function () {
+            outStreamFinished = true;
+            
+            var inStream = fs.createReadStream(file2, {start:10240, autoClose:false}),
+                gotData = false;
+            inStream.on('data', function (d) {
+                // TODO: check that file ends, and ends with TEXTDATA, etc.
+                // TODO: when done, do a read at beginning of fd and close
+                console.log(d);
+            });
+            setTimeout(function () {
+                assert(gotData, "inStream fired 'data' event in a timely fashion.");
+            }, 1e3);
+        });
+        setTimeout(function () {
+            assert(outStreamFinished, "outStream fired 'finish' event in a timely fashion.");
+        }, 5e3);
     });
-    
+
 }, 1e3);
 }
 
 
+
+function assert(b,msg) { if (!b) throw Error("Assertion failure. "+msg); else console.log(msg); }
 
 
