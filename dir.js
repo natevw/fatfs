@@ -220,7 +220,7 @@ dir.addFile = function (vol, dirChain, name, opts, cb) {
 //console.log("Shortname amended to:", mainEntry.Name);
         }
         
-        vol.allocateInFAT(dirChain.toJSON().firstCluster, function (e,fileCluster) {
+        vol.allocateInFAT(dirChain.toJSON().firstCluster || 2, function (e,fileCluster) {
             if (e) return cb(e);
             
             var nameBuf = S.dirEntry.fields['Name'].bytesFromValue(mainEntry.Name),
