@@ -268,7 +268,11 @@ dir.entryForPath = function (vol, path, cb) {
     function findNext(chain) {
         var name = spets.pop();
 //console.log("Looking in", chain, "for:", name);
-        dir._findInDirectory(vol, chain, name, function (e,stats) {
+        if (!name) cb(null, _.makeStat(vol, {
+            // TODO: *real* fake stats for root directory
+            Attr: {directory:true}, FileSize: 0
+        }), chain);
+        else dir._findInDirectory(vol, chain, name, function (e,stats) {
             if (e) cb(e, (spets.length) ? null : {_missingFile:name}, chain);
             else {
                 var _chain = vol.chainForCluster(stats._('firstCluster'));
