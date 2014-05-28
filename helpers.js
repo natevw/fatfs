@@ -31,7 +31,7 @@ exports.parseFlags = function (flags) {
         case 'rs':  info = {read:true, write:false, create:false, sync:true}; break;
         case 'rs+': info = {read:true, write:true, create:false, sync:true}; break;
         case 'w':   info = {read:false, write:true, create:true, truncate:true}; break;
-        case 'wx':  info = {read:false, write:true, create:false, truncate:true}; break;
+        case 'wx':  info = {read:false, write:true, create:false, exclusive:true}; break;
         case 'w+':  info = {read:true, write:true, create:true, truncate:true}; break;
         case 'wx+': info = {read:true, write:true, create:true, exclusive:true}; break;
         case 'a':   info = {read:false, write:true, create:true, append:true}; break;
@@ -171,6 +171,7 @@ exports.makeStat = function (vol, dirEntry) {
     
     // TODO: more infos!
     // …
+    stats.mode;
     stats.blocks;
     stats.atime;
     stats.mtime;

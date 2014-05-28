@@ -149,6 +149,9 @@ var _errors = {
     ROFS: "ROFLCopter file system",
     NOTDIR: "Not a directory",
     BADF: "Bad file descriptor",
+    EXIST: "File exists",
+    ISDIR: "Is a directory",
+    ACCES: "Permission denied",
     _TODO: "Not implemented yet!"
 };
 

@@ -44,6 +44,9 @@ exports.createFileSystem = function (volume) {
                 if (e) cb(e);
                 else finish(newStats, newChain);
             });
+            else if (stats && f.exclusive) cb(S.err.EXIST());
+            else if (stats.isDirectory() && !f._openDir) cb(S.err.ISDIR());
+            else if (f.write && stats._('entry').Attr.readonly) cb(S.err.ACCES());          // TODO: use stats.mode when mappings settled
             else finish(stats,chain);
             function finish(fileStats,fileChain) {
                 _fd.stats = fileStats;
@@ -52,7 +55,6 @@ exports.createFileSystem = function (volume) {
                     // TODO: set size of file to zero…
                     cb(S.err._TODO());
                 }
-                // TODO: handle ISDIR/ACCES situations
                 else cb(null, fileDescriptors.push(_fd)-1);
             }
         });
@@ -99,6 +101,12 @@ exports.createFileSystem = function (volume) {
             }
             processNext();
         }
+    }, (_n_ === '_nested_')); }
+    
+    fs._mkdir = function (fd, cb, _n_) { cb = GROUP(cb, function () {
+        var _fd = fileDescriptors[fd];
+        if (!_fd) _.delayedCall(cb, S.err.BADF());
+        else _.delayedCall(cb, S.err._TODO());
     }, (_n_ === '_nested_')); }
     
     fs.write = function (fd, buf, off, len, pos, cb, _n_) { cb = GROUP(cb, function () {
@@ -182,6 +190,15 @@ exports.createFileSystem = function (volume) {
         }, cb);
     };
     
+    fs.mkdir = function (path, mode, cb) {
+        if (typeof mode === 'function') {
+            cb = mode;
+            mode = 0777;
+        }
+        _fdOperation(path, {flag:'\\wx'}, function (fd, cb) {
+            fs._mkdir(fd, cb, '_nested_');
+        }, cb);
+    }
     
     return fs;
 }
