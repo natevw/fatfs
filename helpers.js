@@ -184,7 +184,7 @@ exports.adjustedPos = function (pos, bytes) {
     var _pos = {
         chain: pos.chain,
         sector: pos.sector,
-        offset: pos.offset
+        offset: pos.offset + bytes
     }, secSize = pos.chain.sectorSize;
     while (_pos.offset > secSize) {
         _pos.sector += 1;
