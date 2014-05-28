@@ -50,7 +50,7 @@ exports.init = function (volume, bootSector) {
     };
     
     vol._writeSector = function (secNum, data, cb) {
-console.log("Writing sector", secNum, data, data.length);
+console.log("_writeSector of", data.length, "bytes to sector", secNum);
         var secSize = vol._sectorSize;
         // NOTE: these are internal assertions, public API will get proper `S.err`s
         if (data.length !== secSize) throw Error("Must write complete sector");
@@ -63,7 +63,7 @@ console.log("Writing sector", secNum, data, data.length);
             FATOffset = (fatType === 'fat12') ? Math.floor(n/2) * entryStruct.size : n * entryStruct.size,
             SecNum = BS.ResvdSecCnt + Math.floor(FATOffset / BS.BytsPerSec);
             EntOffset = FATOffset % BS.BytsPerSec;
-        return {sector:SecNum, offset:EntOffset, struct:entryStruct};
+        return {sector:SecNum-BS.ResvdSecCnt, offset:EntOffset, struct:entryStruct};
     }
     
     // TODO: all this FAT manipulation is crazy inefficient! needs read caching *and* write caching
@@ -75,6 +75,7 @@ console.log("Writing sector", secNum, data, data.length);
     vol.fetchFromFAT = function (clusterNum, cb) {
         var info = fatInfoForCluster(clusterNum);
         fatChain.readFromPosition(info, info.struct.size, function (e,n,d) {
+console.log("READ FROM FAT CHAIN", fatChain.toJSON(), info, e,n,d);
             if (e) return cb(e);
             var status = info.struct.valueFromBytes(d), prefix;
             if (fatType === 'fat12') {
@@ -104,6 +105,7 @@ console.log("Writing sector", secNum, data, data.length);
             status += S.fatPrefix[fatType];
         }
         var info = fatInfoForCluster(clusterNum);
+        // TODO: technically fat32 needs to *preserve* the high 4 bits
         if (fatType === 'fat12') fatChain.readFromPosition(info, info.struct.size, function (e,n,d) {
             var value = info.struct.valueFromBytes(d);
             if (clusterNum % 2) {
@@ -126,8 +128,10 @@ console.log("Writing sector", secNum, data, data.length);
             cb = hint;
             hint = 2;   // TODO: cache a better starting point?
         }
+console.log("allocateInFAT", hint);
         function searchForFreeCluster(num, cb) {
             if (num < countofClusters) vol.fetchFromFAT(num, function (e, status) {
+console.log("…at",num,"got:",status);
                 if (e) cb(e);
                 else if (status === 'free') cb(null, num);
                 else searchForFreeCluster(num+1, cb);

@@ -21,6 +21,7 @@ exports.createFileSystem = function (volume) {
         fs._entryForPath = dir.entryForPath.bind(dir, vol);
         fs._updateEntry = dir.updateEntry.bind(dir, vol);
         fs._addFile = dir.addFile.bind(dir, vol);
+        fs._initDir = dir.init.bind(dir, vol);
     });
     
     // NOTE: we really don't share namespace, but avoid first three anyway…
@@ -40,7 +41,8 @@ exports.createFileSystem = function (volume) {
         
         fs._entryForPath(path, function (e,stats,chain) {
             if (e && !(e.code === 'NOENT' && f.create && stats)) cb(e);
-            else if (e) fs._addFile(chain, stats._missingFile, function (e,newStats,newChain) {
+            else if (e) fs._addFile(chain, stats._missingFile, {dir:f._openDir}, function (e,newStats,newChain) {
+console.log("Created file", newStats._('entry'), newChain.toJSON());
                 if (e) cb(e);
                 else finish(newStats, newChain);
             });
@@ -106,7 +108,7 @@ exports.createFileSystem = function (volume) {
     fs._mkdir = function (fd, cb, _n_) { cb = GROUP(cb, function () {
         var _fd = fileDescriptors[fd];
         if (!_fd) _.delayedCall(cb, S.err.BADF());
-        else _.delayedCall(cb, S.err._TODO());
+        else fs._initDir(_fd.chain, cb);
     }, (_n_ === '_nested_')); }
     
     fs.write = function (fd, buf, off, len, pos, cb, _n_) { cb = GROUP(cb, function () {

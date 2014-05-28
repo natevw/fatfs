@@ -25,8 +25,10 @@ setTimeout(function () {            // HACK: should wait for 'ready' event or so
         TEXTDATA = "Hello world!";
     
     fs.mkdir(BASE_DIR, function (e) {
+if (e) console.error(e.stack);
         assert(!e, "No error from fs.mkdir");
         fs.readdir(BASE_DIR, function (e,arr) {
+if (e) console.error(e.stack);
             assert(!e, "No error from fs.readdir");
             assert(arr.length === 0 , "No files in BASE_DIR yet.");
         });
@@ -72,6 +74,7 @@ setTimeout(function () {            // HACK: should wait for 'ready' event or so
             });
         });
         
+        return;
         var file2 = [BASE_DIR,FILENAME+"2"].join('/'),
             outStream = fs.createWriteStream(file2);
         var outStreamOpened = false;

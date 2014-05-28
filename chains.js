@@ -32,6 +32,8 @@ function _baseChain(vol) {
     };
     
     chain.writeToPosition = function (targetPos, data, cb) {
+console.log("WRITING", data.length, "bytes at", targetPos, "in", this.toJSON(), data);
+console.log(Error().stack);
         if (typeof targetPos === 'number') targetPos = posFromOffset(targetPos);
         function _writeToChain(sec, off, data) {
             var incomplete = (off || data.length < chain.sectorSize);
@@ -64,9 +66,12 @@ function _baseChain(vol) {
 
 
 
-exports.clusterChain = function (vol, firstCluster) {
+exports.clusterChain = function (vol, firstCluster, _parent) {
     var chain = _baseChain(vol),
         cache = [firstCluster];
+    
+    // ~HACK: needed by `dir.init` for ".." entry…
+    if (_parent) chain._parentChain = _parent;
     
     function _cacheIsComplete() {
         return cache[cache.length-1] === 'eof';
@@ -115,7 +120,7 @@ exports.clusterChain = function (vol, firstCluster) {
         extendCacheToInclude(i, function (e,c) {
             if (e) cb(e);
             else if (c === 'eof') {
-                if (alloc) expandChainToCluster(i, function (e,c) {
+                if (alloc) expandChainToLength(i+1, function (e,c) {
                     if (e) cb(e);
                     else cb(null, vol._firstSectorOfCluster(c));
                 });

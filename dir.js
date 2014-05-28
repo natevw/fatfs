@@ -107,13 +107,46 @@ dir.iterator = function (dirChain, opts) {
     return iter;
 };
 
-dir.addFile = function (vol, dirChain, name, cb) {
+// TODO: expand this for more use from `dir.addFile`?
+function updateEntry(entry, info) {
+    if (typeof info === 'number') info = {firstCluster:info};
+    if ('firstCluster' in info) {
+        entry.FstClusLO = info.firstCluster & 0xFFFF;
+        entry.FstClusHI = info.firstCluster >>> 16;
+    }
+    return entry;
+}
+
+dir.init = function (vol, dirChain, cb) {
+    var isRootDir = ('numSectors' in dirChain.toJSON()),    // HACK: all others would be a clusterChain
+        initialCluster = Buffer(dirChain.sectorSize*vol._sectorsPerCluster),
+        entriesOffset = {bytes:0};
+    initialCluster.fill(0);
+    function writeEntry(name, clusterNum) {
+        while (name.length < 8) name += " ";
+        S.dirEntry.bytesFromValue(updateEntry({
+            Name: {filename:name, extension:"   "},
+            Attr: {directory:true}
+        }, clusterNum), initialCluster, entriesOffset);
+    }
+    if (!isRootDir) {
+        writeEntry(".", dirChain.toJSON().firstCluster);
+        writeEntry("..", dirChain._parentChain.toJSON().firstCluster);
+    };
+    dirChain.writeToPosition(0, initialCluster, cb);
+};
+
+dir.addFile = function (vol, dirChain, name, opts, cb) {
+    if (typeof opts === 'function') {
+        cb = opts;
+        opts = {};
+    }
     var entries = [], mainEntry = null,
         short = _.shortname(name);
     entries.push(mainEntry = {
         Name: {filename:short.basis[0], extension:short.basis[1]},
-        // TODO: finalize initial properties…
-        Attr: {directory:false},
+        // TODO: finalize initial properties… (via `opts.mode` instead?)
+        Attr: {directory:opts.dir, archive:true},
         FstClusHI: 0,
         FstClusLO: 0,
         FileSize: 0,
@@ -149,7 +182,7 @@ dir.addFile = function (vol, dirChain, name, cb) {
         function processNext(next) {
             next = next(function (e, d, entryPos) {
                 if (e) cb(e);
-                else if (!d) cb(null, {tail:maxTail+1, target:entryPos, lastEntry:true});
+                else if (!d) cb(null, {tail:maxTail, target:entryPos, lastEntry:true});
                 else if (d._free) processNext(next);         // TODO: look for long enough reusable run
                 else if (d._name.toUpperCase() === matchName) return cb(S.err.EXIST());
                 else {
@@ -163,7 +196,7 @@ dir.addFile = function (vol, dirChain, name, cb) {
                     if (tailName.extension === d.Name.extension &&
                         tailName.filename.indexOf(dName) === 0)
                     {
-                        maxTail = Math.max(dNum, maxTail);
+                        maxTail = Math.max(dNum+1, maxTail);
                     }
                     processNext(next);
                 }
@@ -178,20 +211,19 @@ dir.addFile = function (vol, dirChain, name, cb) {
         if (d.tail) {
             var name = mainEntry.Name.filename,
                 suffix = '~'+d.tail,
-                sufIdx = Math.min(name.indexOf(' '), name.length-suffix.length);
+                endIdx = name.indexOf(' '),
+                sufIdx = (~endIdx) ? Math.min(endIdx, name.length-suffix.length) : name.length-suffix.length;
             if (sufIdx < 0) return cb(S.err.NAMETOOLONG());         // TODO: would EXIST be more correct?
             mainEntry.Name.filename = name.slice(0,sufIdx)+suffix+name.slice(sufIdx+suffix.length);
-            console.log("Shortname amended to:", mainEntry.Name);
+console.log("Shortname amended to:", mainEntry.Name);
         }
         
-        // TODO: provide dirChain's cluster as hint
-        vol.allocateInFAT(function (e,fileCluster) {
+        vol.allocateInFAT(dirChain.toJSON().firstCluster, function (e,fileCluster) {
             if (e) return cb(e);
             
             var nameBuf = S.dirEntry.fields['Name'].bytesFromValue(mainEntry.Name),
                 nameSum = _.checksumName(nameBuf);
-            mainEntry.FstClusLO = fileCluster & 0xFFFF;
-            mainEntry.FstClusHI = fileCluster >>> 16;
+            updateEntry(mainEntry, {firstCluster:fileCluster});
             mainEntry._pos = _.adjustedPos(d.target, S.dirEntry.size*(entries.length-1));
             entries.slice(1).forEach(function (entry) {
                 entry.Chksum = nameSum;
@@ -206,11 +238,11 @@ dir.addFile = function (vol, dirChain, name, cb) {
                 entryType.bytesFromValue(entry, entriesData, dataOffset);
             });
             
-            console.log("Writing", entriesData.length, "byte directory entry", d.target, "bytes into", dirChain);
+console.log("Writing", entriesData.length, "byte directory entry", mainEntry, "into", dirChain.toJSON(), "at", d.target);
             dirChain.writeToPosition(d.target, entriesData, function (e) {
                 // TODO: if we get error, what/should we clean up?
                 if (e) cb(e);
-                else cb(null, _.makeStat(vol,mainEntry), vol.chainForCluster(fileCluster));
+                else cb(null, _.makeStat(vol,mainEntry), vol.chainForCluster(fileCluster, dirChain));
             });
         });
     });
