@@ -215,7 +215,7 @@ dir.addFile = function (vol, dirChain, name, opts, cb) {
                 sufIdx = (~endIdx) ? Math.min(endIdx, name.length-suffix.length) : name.length-suffix.length;
             if (sufIdx < 0) return cb(S.err.NAMETOOLONG());         // TODO: would EXIST be more correct?
             mainEntry.Name.filename = name.slice(0,sufIdx)+suffix+name.slice(sufIdx+suffix.length);
-console.log("Shortname amended to:", mainEntry.Name);
+//console.log("Shortname amended to:", mainEntry.Name);
         }
         
         vol.allocateInFAT(dirChain.toJSON().firstCluster, function (e,fileCluster) {
@@ -238,7 +238,7 @@ console.log("Shortname amended to:", mainEntry.Name);
                 entryType.bytesFromValue(entry, entriesData, dataOffset);
             });
             
-console.log("Writing", entriesData.length, "byte directory entry", mainEntry, "into", dirChain.toJSON(), "at", d.target);
+//console.log("Writing", entriesData.length, "byte directory entry", mainEntry, "into", dirChain.toJSON(), "at", d.target);
             dirChain.writeToPosition(d.target, entriesData, function (e) {
                 // TODO: if we get error, what/should we clean up?
                 if (e) cb(e);
@@ -293,5 +293,6 @@ dir.updateEntry = function (vol, dirEntry, newStats, cb) {
     if ('atime' in newStats) ;      // TODO
     
     var data = S.dirEntry.bytesFromValue(newEntry);
+//console.log("UPDATING ENTRY", newStats, entryPos, data);
     chain.writeToPosition(entryPos, data, cb);
 };

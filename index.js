@@ -42,7 +42,6 @@ exports.createFileSystem = function (volume) {
         fs._entryForPath(path, function (e,stats,chain) {
             if (e && !(e.code === 'NOENT' && f.create && stats)) cb(e);
             else if (e) fs._addFile(chain, stats._missingFile, {dir:f._openDir}, function (e,newStats,newChain) {
-console.log("Created file", newStats._('entry'), newChain.toJSON());
                 if (e) cb(e);
                 else finish(newStats, newChain);
             });

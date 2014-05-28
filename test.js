@@ -25,10 +25,8 @@ setTimeout(function () {            // HACK: should wait for 'ready' event or so
         TEXTDATA = "Hello world!";
     
     fs.mkdir(BASE_DIR, function (e) {
-if (e) console.error(e.stack);
         assert(!e, "No error from fs.mkdir");
         fs.readdir(BASE_DIR, function (e,arr) {
-if (e) console.error(e.stack);
             assert(!e, "No error from fs.readdir");
             assert(arr.length === 0 , "No files in BASE_DIR yet.");
         });
@@ -37,7 +35,6 @@ if (e) console.error(e.stack);
             assert(!e, "No error from fs.writeFile");
             fs.readdir(BASE_DIR, function (e, arr) {
                 assert(!e, "Still no error from fs.readdir");
-console.log("FILES", arr);
                 assert(arr.length === 1, "Test directory contains a single file.");
                 assert(arr[0] === FILENAME, "Filename is correct.");
                 
