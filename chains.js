@@ -49,7 +49,7 @@ function _baseChain(vol) {
                     else if (data.length) _writeToChain(sec+1, 0, data);
                     else cb(null);
                 });
-            }); else chain.writeSector(sec, data, function (e) {
+            }); else chain.writeSector(sec, data.slice(0, chain.sectorSize), function (e) {
                 if (e) return cb(e);
                 
                 data = data.slice(chain.sectorSize);
