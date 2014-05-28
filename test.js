@@ -24,6 +24,11 @@ setTimeout(function () {            // HACK: should wait for 'ready' event or so
         FILENAME = "Simple File.txt",
         TEXTDATA = "Hello world!";
     
+    fs.readdir("/", function (e,files) {
+        assert(!e, "No error reading root directory.");
+        assert(Array.isArray(files), "Got a list of files: "+files);
+    });
+    
     fs.mkdir(BASE_DIR, function (e) {
         assert(!e, "No error from fs.mkdir");
         fs.readdir(BASE_DIR, function (e,arr) {
