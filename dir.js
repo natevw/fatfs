@@ -10,6 +10,7 @@ dir.iterator = function (dirChain, opts) {
         if (_cachedBuf && n === _cachedBuf._n) cb(null, _cachedBuf);
         else _cachedBuf = null, dirChain.readSector(n, function (e,d) {
             if (e) cb(e);
+            else if (!d) return cb(null, null);
             else {
                 d._n = n;
                 _cachedBuf = d;
