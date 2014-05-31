@@ -154,7 +154,7 @@ console.log("want:", TEXTDATA);
             });
             setTimeout(function () {
                 assert(outStreamFinished, "outStream fired 'finish' event in a timely fashion.");
-            }, 5e3);
+            }, 1e3);
         }
     });
 
