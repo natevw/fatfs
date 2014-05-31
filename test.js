@@ -89,6 +89,30 @@ if (e) console.log(e.stack);
                             assert(Buffer.isBuffer(d), "Result without encoding is a buffer.");
                             assert(d.length === 1, "Buffer is correct size.");
                             assert(d[0] === 0x42, "Buffer content is correct.");
+                            
+                            fs.truncate(file, 1025, function (e) {
+                                assert(!e, "No error from fs.truncate (extending)");
+                                fs.readFile(file, function (e, d) {
+                                    assert(!e, "Still no error from fs.readFile after extension");
+                                    assert(d.length === 1025, "Read after extension is correct size.");
+                                    assert(d[0] === 0x42, "First byte is still correct.");
+                                    var allZeroes = true;
+                                    for (var i = 1, len = d.length; i < len; ++i) if (d[i] !== 0) allZeroes = false;
+                                    assert(allZeroes, "Extended portion of file is zero-filled.");
+                                    
+                                    fs.truncate(file, 3, function (e) {
+                                        assert(!e, "No error from fs.truncate (shortening)");
+                                        fs.readFile(file, function (e, d) {
+                                            assert(!e, "Still no error from fs.readFile after shortening.");
+                                            assert(d.length === 3, "Read after shortening is correct size.");
+                                            assert(d[0] === 0x42, "First byte is still correct.");
+                                            assert(d[1] === 0x00, "Second byte is still correct.");
+                                            assert(d[2] === 0x00, "Third byte is still correct.");
+                                        });
+                                    }); 
+                                });
+                                
+                            });
                         });
                     });
                 });

@@ -156,7 +156,7 @@ exports.clusterChain = function (vol, firstCluster, _parent) {
         extendCacheToInclude(i, function (e,c) {
             if (e) cb(e);
             else if (c === 'eof') cb(null, null);
-            else cb(null, vol._firstSectorOfCluster(c));
+            else cb(null, vol._firstSectorOfCluster(c));        // TODO: implement
         });
     };
     

@@ -59,15 +59,13 @@ exports.createFileSystem = function (volume, bootSector) {
             else if (f.write && entry.Attr.readonly) cb(S.err.ACCES());
             else finish(entry,chain);
             function finish(fileEntry,fileChain) {
+                var fd = fileDescriptors.push(_fd)-1;
                 _fd.entry = fileEntry;
                 _fd.chain = fileChain;
-                if (f.truncate && _fd.entry._size) {
-                    var fd = fileDescriptors.push(_fd)-1;
-                    fs.ftruncate(fd, 0, function (e) {
-                        cb(e, fd);
-                    }, '_nested_');
-                }
-                else cb(null, fileDescriptors.push(_fd)-1);
+                if (f.truncate && _fd.entry._size) fs.ftruncate(fd, 0, function (e) {
+                    cb(e, fd);
+                }, '_nested_');
+                else cb(null, fd);
             }
         });
     }, (_n_ === '_nested_')); };
@@ -89,7 +87,7 @@ exports.createFileSystem = function (volume, bootSector) {
             if (_.workaroundTessel380) _buf.copy(buf,off);        // WORKAROUND: https://github.com/tessel/beta/issues/380
             _fd.pos = _pos + bytes;
             if (e || volume.noatime) finish(e);
-            else fs._updateEntry(_fd.entry, {atime:new Date()}, finish);
+            else fs._updateEntry(_fd.entry, {atime:true}, finish);
             function finish(e) {
                 cb(e,bytes,buf);
             }
@@ -130,9 +128,8 @@ exports.createFileSystem = function (volume, bootSector) {
             _buf = buf.slice(off,off+len);
         _fd.chain.writeToPosition(_pos, _buf, function (e) {
             _fd.pos = _pos + len;
-            var curDate = new Date(),
-                newSize = Math.max(_fd.entry._size, _fd.pos),
-                newInfo = {size:newSize,archive:true,atime:curDate,mtime:curDate};
+            var newSize = Math.max(_fd.entry._size, _fd.pos),
+                newInfo = {size:newSize,archive:true,atime:true,mtime:true};
             // TODO: figure out why this silently fails on FAT12
             fs._updateEntry(_fd.entry, newInfo, function (ee) {
                 cb(e||ee, len, buf);
@@ -142,12 +139,19 @@ exports.createFileSystem = function (volume, bootSector) {
     
     fs.ftruncate = function (fd, len, cb, _n_) { cb = GROUP(cb, function () {
         var _fd = fileDescriptors[fd];
-        if (!_fd) _.delayedCall(cb, S.err.BADF());
+        if (!_fd || !_fd.flags.write) _.delayedCall(cb, S.err.BADF());
         
-        var curDate = new Date();
-        fs._updateEntry(_fd.entry, {size:len,archive:true,atime:curDate,mtime:curDate}, function (e, newEntry) {
+        var numSectors = Math.ceil(len / _fd.chain.sectorSize),
+            newStats = {size:len,archive:true,atime:true,mtime:true};
+        // NOTE: we order operations for best state in case of only partial success
+        if (len === _fd.entry._size) _.delayedCall(cb);
+        else if (len < _fd.entry._size) fs._updateEntry(_fd.entry, newStats, function (e) {
             if (e) cb(e);
-            else _fd.chain.truncate(Math.ceil(len / _fd.chain.sectorSize), cb);
+            else _fd.chain.truncate(numSectors, cb);
+        });
+        else _fd.chain.truncate(numSectors, function (e) {
+            if (e) cb(e);
+            else fs._updateEntry(_fd.entry, newStats, cb);
         });
     }, (_n_ === '_nested_')); };
     
@@ -309,7 +313,7 @@ exports.createFileSystem = function (volume, bootSector) {
     };
     
     fs.truncate = function (path, len, cb) {
-        _fdOperation(path, opts, function (fd, cb) {
+        _fdOperation(path, {flag:'r+'}, function (fd, cb) {
             fs.ftruncate(fd, len, cb, '_nested_');
         }, cb);
     };

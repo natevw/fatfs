@@ -300,8 +300,5 @@ dir.updateEntry = function (vol, entry, newStats, cb) {
         newEntry = _updateEntry(entry, newStats),
         data = S.dirEntry.bytesFromValue(newEntry);
 //console.log("UPDATING ENTRY", newStats, newEntry, entryPos, data);
-    chain.writeToPosition(entryPos, data, function (e) {
-        if (e) cb(e);
-        else cb(null, newEntry);
-    });
+    chain.writeToPosition(entryPos, data, cb);
 };
