@@ -95,7 +95,6 @@ exports.clusterChain = function (vol, firstCluster, _parent) {
     }
     
     function fillCluster(c, val, cb) {
-        cb(S.err._TODO());
         var buf = new Buffer(chain.sectorSize);
         buf.fill(val);
         function fillSectors(s, rem) {
@@ -127,14 +126,27 @@ exports.clusterChain = function (vol, firstCluster, _parent) {
                 });
             });
         }
-        addCluster(len - cache.length, cache[cache.length - 1]);
+        addCluster(clusterCount - cache.length, cache[cache.length - 1]);
     }
     
     function shrinkChainToLength(clusterCount, cb) {
-        // TODO: implement
-        cb(S.err._TODO());
+        if (!_cacheIsComplete()) throw Error("Must be called only when cache is complete!");
+        else cache.pop();            // remove 'eof' entry until finished
+        
+        function removeClusters(count, cb) {
+            if (!count) cache.push('eof'), cb();
+            else vol.storeToFAT(cache.pop(), 'free', function (e) {
+                if (e) cb(e);
+                else removeClusters(count - 1, cb);
+            });
+        }
+        if (clusterCount) removeClusters(cache.length - clusterCount, cb);
+        else removeClusters(cache.length - 1, function (e) {
+            // we never remove the firstCluster ourselve; clear it instead…
+            if (e) cb(e);
+            else fillCluster(cache[0], 0, cb);
+        });
     }
-    
     
     function firstSectorOfClusterAtIdx(i, alloc, cb) {
         extendCacheToInclude(i, function (e,c) {

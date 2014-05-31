@@ -21,7 +21,7 @@ function startTests(imagePath) {
         
     [
         //'rename',
-        //'ftruncate','truncate',
+        'ftruncate','truncate',
         //'chown','fchown','lchown','chmod','fchmod','lchmod',
         'stat','lstat','fstat',
         //'link','symlink','readlink','realpath',
