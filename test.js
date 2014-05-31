@@ -151,7 +151,7 @@ if (e) console.log(e.stack);
             });
             setTimeout(function () {
                 assert(outStreamFinished, "outStream fired 'finish' event in a timely fashion.");
-            }, 1e3);
+            }, 2e3);
         }
     });
 

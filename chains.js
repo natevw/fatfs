@@ -150,6 +150,9 @@ exports.clusterChain = function (vol, firstCluster, _parent) {
     };
     
     chain.truncate = function (i, cb) {
+        // TODO: is this at all finished???!
+        i = Math.ceil(i / vol._sectorsPerCluster) * vol._sectorsPerCluster;
+        
         extendCacheToInclude(i, function (e,c) {
             if (e) cb(e);
             else if (c === 'eof') cb(null, null);

@@ -62,13 +62,9 @@ exports.createFileSystem = function (volume, bootSector) {
                 _fd.stats = fileStats;
                 _fd.chain = fileChain;
                 if (f.truncate && _fd.stats.size) {
-                    var curDate = new Date();
-                    fs._updateEntry(_fd.stats._('entry'), {size:0,archive:true,atime:curDate,mtime:curDate}, function (e, newEntry) {
-                        if (e) cb(e);
-                        else _fd.chain.truncate(1, function (e) {
-                            if (e) cb(e);
-                            else finish(_.makeStat(vol, newEntry), _fd.chain);
-                        });
+                    var fd = fileDescriptors.push(_fd)-1;
+                    fs.ftruncate(fd, 0, function (e) {
+                        cb(e, fd);
                     });
                 }
                 else cb(null, fileDescriptors.push(_fd)-1);
@@ -95,6 +91,7 @@ exports.createFileSystem = function (volume, bootSector) {
             if (e || volume.noatime) finish(e);
             else fs._updateEntry(_fd.stats._('entry'), {atime:new Date()}, finish);
             function finish(e) {
+                // TODO: update _fd.stats
                 cb(e,bytes,buf);
             }
         });
@@ -118,13 +115,13 @@ exports.createFileSystem = function (volume, bootSector) {
             }
             processNext();
         }
-    }, (_n_ === '_nested_')); }
+    }, (_n_ === '_nested_')); };
     
     fs._mkdir = function (fd, cb, _n_) { cb = GROUP(cb, function () {
         var _fd = fileDescriptors[fd];
         if (!_fd) _.delayedCall(cb, S.err.BADF());
         else fs._initDir(_fd.chain, cb);
-    }, (_n_ === '_nested_')); }
+    }, (_n_ === '_nested_')); };
     
     fs.write = function (fd, buf, off, len, pos, cb, _n_) { cb = GROUP(cb, function () {
         var _fd = fileDescriptors[fd];
@@ -139,10 +136,26 @@ exports.createFileSystem = function (volume, bootSector) {
                 newInfo = {size:newSize,archive:true,atime:curDate,mtime:curDate};
             // TODO: figure out why this silently fails on FAT12
             fs._updateEntry(_fd.stats._('entry'), newInfo, function (ee) {
+                // TODO: update _fd.stats
                 cb(e||ee, len, buf);
             });
         });
     }, (_n_ === '_nested_')); };
+    
+    fs.ftruncate = function (fd, len, cb, _n_) { cb = GROUP(cb, function () {
+        var _fd = fileDescriptors[fd];
+        if (!_fd) _.delayedCall(cb, S.err.BADF());
+        
+        var curDate = new Date();
+        fs._updateEntry(_fd.stats._('entry'), {size:len,archive:true,atime:curDate,mtime:curDate}, function (e, newEntry) {
+            if (e) cb(e);
+            else {
+                _fd.stats = _.makeStat(newEntry);
+                _fd.chain.truncate(Math.ceil(len / _fd.chain.sectorSize), cb);
+            }
+        });
+    }, (_n_ === '_nested_')); };
+    
     
     fs.close = function (fd, cb) {
         var _fd = fileDescriptors[fd];
@@ -297,6 +310,12 @@ exports.createFileSystem = function (volume, bootSector) {
         _fdOperation(path, opts, function (fd, cb) {
             if (typeof data === 'string') data = new Buffer(data, opts.encoding || 'utf8');
             fs.write(fd, data, 0, data.length, null, function (e) { cb(e); }, '_nested_');
+        }, cb);
+    };
+    
+    fs.truncate = function (path, len, cb) {
+        _fdOperation(path, opts, function (fd, cb) {
+            fs.ftruncate(fd, len, cb, '_nested_');
         }, cb);
     };
     
