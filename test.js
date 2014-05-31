@@ -89,26 +89,51 @@ if (e) console.log(e.stack);
             setTimeout(function () {
                 assert(outStreamOpened, "outStream fired 'open' event in a timely fashion.");
             }, 1e3);
-            outStream.write(TEXTDATA+"\n");
-            outStream.write("Ο καλύτερος χρόνος να φυτευτεί ένα \ud83c\udf31 είναι δέκα έτη πριν.");
-            outStream.write("La vez del segundo mejor ahora está.\n");
-            for (var i = 0; i < 1024+42; ++i) outStream.write("123456789\n");
-            outStream.write("JavaScript how do they work\n");
-            outStream.write("The end, almost.\n");
-            outStream.end(TEXTDATA);
+            var TEXT_MOD = TEXTDATA.toLowerCase()+"\n";
+            outStream.write(TEXT_MOD, 'utf16le');
+            outStream.write("Ο καλύτερος χρόνος να φυτευτεί ένα \ud83c\udf31 είναι δέκα έτη πριν.", 'utf16le');
+            outStream.write("La vez del segundo mejor ahora está.\n", 'utf16le');
+            for (var i = 0; i < 1024; ++i) outStream.write("123456789\n", 'ascii');
+            outStream.write("JavaScript how do they work\n", 'utf16le');
+            outStream.write("The end, almost.\n", 'utf16le');
+            outStream.end(TEXTDATA, 'utf16le');
             var outStreamFinished = false;
             outStream.on('finish', function () {
                 outStreamFinished = true;
                 
-                var inStream = fs.createReadStream(file2, {start:10240, autoClose:false}),
-                    gotData = false;
+                var inStream = fs.createReadStream(file2, {start:10240, encoding:'utf16le', autoClose:false}),
+                    gotData = false, gotEOF = false, inStreamFD = null;
+                inStream.on('open', function (fd) {
+                    assert(fd, "Got file descriptor");
+                    inStreamFD = fd;
+                });
                 inStream.on('data', function (d) {
-                    // TODO: check that file ends, and ends with TEXTDATA, etc.
-                    // TODO: when done, do a read at beginning of fd and close
-                    console.log(d);
+                    gotData = true;
+                    assert(typeof d === 'string', "Data returned as string.");
+console.log("orig:", JSON.stringify(d));            // aha! it's returning content past the end of the file…
+console.log("chop:", d.slice(-TEXTDATA.length), -TEXTDATA.length, d.length);
+console.log("want:", TEXTDATA);
+                    //assert(d.slice(-TEXTDATA.length) === TEXTDATA, "End of file matches what was written.");
+                });
+                inStream.on('end', function () {
+                    gotEOF = true;
+                    
+                    var len = Buffer.byteLength(TEXT_MOD, 'utf16le'),
+                        buf = new Buffer(len);
+                    fs.read(inStreamFD, buf, 0, len, 0, function (e,n,d) {
+                        assert(!e, "No error reading from beginning of inStream's file descriptor.");
+                        assert(n === len, "Read complete buffer at beginning of inStream's fd.");
+                        assert(d.toString('utf16le') === TEXT_MOD, "Data matches at beginning of inStream's fd.");
+                        fs.close(inStreamFD, function (e) {
+                            assert(!e, "No error closing inStream's fd.");
+                        });
+                    });
                 });
                 setTimeout(function () {
                     assert(gotData, "inStream fired 'data' event in a timely fashion.");
+                    setTimeout(function () {
+                        assert(gotEOF, "inStream fired 'eof' event in a timely fashion.");
+                    }, 1e3);
                 }, 1e3);
             });
             setTimeout(function () {
