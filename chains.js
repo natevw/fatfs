@@ -60,6 +60,11 @@ function _baseChain(vol) {
         _writeToChain(targetPos.sector, targetPos.offset, data);
     };
     
+    chain._clearSectors = function (start, count, cb) {
+        
+    
+    };
+    
     return chain;
 };
 
@@ -89,41 +94,57 @@ exports.clusterChain = function (vol, firstCluster, _parent) {
         });
     }
     
-    // NOTE: returns the final cluster (same as if called `extendCacheToInclude(len)`)
-    function expandChainToLength(len, cb) {
+    function fillCluster(c, val, cb) {
+        cb(S.err._TODO());
+        var buf = new Buffer(chain.sectorSize);
+        buf.fill(val);
+        function fillSectors(s, rem) {
+            if (!rem) cb();
+            else vol._writeSector(s, buf, function (e) {
+                if (e) cb(e);
+                else fillSectors(s+1, rem-1);
+            });
+        }
+        fillSectors(vol._firstSectorOfCluster(c), vol._sectorsPerCluster);
+    }
+    
+    function expandChainToLength(clusterCount, cb) {
         if (!_cacheIsComplete()) throw Error("Must be called only when cache is complete!");
         else cache.pop();            // remove 'eof' entry until finished
         
         function addCluster(clustersNeeded, lastCluster) {
-            vol.allocateInFAT(lastCluster, function (e, newCluster) {
+            if (!clustersNeeded) cache.push('eof'), cb();
+            else vol.allocateInFAT(lastCluster, function (e, newCluster) {
                 if (e) cb(e);
                 else vol.storeToFAT(lastCluster, newCluster, function (e) {
                     if (e) return cb(e);
                     
                     cache.push(newCluster);
-                    if (clustersNeeded) {
-                        // TODO: zero-fill contents of newCluster!
-                        addCluster(clustersNeeded-1, newCluster);
-                    } else {
-                        // NOTE: we don't zero-fill last cluster; we assume it will be written next
-                        cache.push('eof');
-                        cb(null, newCluster);
-                    }
+                    fillCluster(newCluster, 0, function (e) {
+                        if (e) cb(e);
+                        else addCluster(clustersNeeded-1, newCluster);
+                    });
                 });
             });
         }
         addCluster(len - cache.length, cache[cache.length - 1]);
     }
     
+    function shrinkChainToLength(clusterCount, cb) {
+        // TODO: implement
+        cb(S.err._TODO());
+    }
+    
+    
     function firstSectorOfClusterAtIdx(i, alloc, cb) {
         extendCacheToInclude(i, function (e,c) {
             if (e) cb(e);
             else if (c === 'eof') {
-                if (alloc) expandChainToLength(i+1, function (e,c) {
+                if (alloc) expandChainToLength(i+1, function (e) {
                     if (e) cb(e);
-                    else cb(null, vol._firstSectorOfCluster(c));
+                    else firstSectorOfClusterAtIdx(i, false, cb);
                 });
-                else cb(null, null);
+                else cb(null, -1);
             }
             else cb(null, vol._firstSectorOfCluster(c));
         });
@@ -134,7 +155,7 @@ exports.clusterChain = function (vol, firstCluster, _parent) {
             c = (i - o) / vol._sectorsPerCluster;
         firstSectorOfClusterAtIdx(c, false, function (e,s) {
             if (e) cb(e);
-            else if (s) vol._readSector(s+o, cb);
+            else if (s >= 0) vol._readSector(s+o, cb);
             else _pastEOF(cb);
         });
     };
@@ -145,18 +166,20 @@ exports.clusterChain = function (vol, firstCluster, _parent) {
             c = (i - o) / vol._sectorsPerCluster;
         firstSectorOfClusterAtIdx(c, true, function (e,s) {
             if (e) cb(e);
+            else if (s < 0) cb(S.err.IO());
             else vol._writeSector(s+o, data, cb);
         });
     };
     
-    chain.truncate = function (i, cb) {
-        // TODO: is this at all finished???!
-        i = Math.ceil(i / vol._sectorsPerCluster) * vol._sectorsPerCluster;
-        
-        extendCacheToInclude(i, function (e,c) {
-            if (e) cb(e);
-            else if (c === 'eof') cb(null, null);
-            else cb(null, vol._firstSectorOfCluster(c));        // TODO: implement
+    chain.truncate = function (numSectors, cb) {
+        extendCacheToInclude(Infinity, function (e,c) {
+            if (e) return cb(e);
+            
+            var currentLength = cache.length-1,
+                clustersNeeded = Math.ceil(numSectors / vol._sectorsPerCluster);
+            if (clustersNeeded < currentLength) shrinkChainToLength(clustersNeeded, cb);
+            else if (clustersNeeded > currentLength) expandChainToLength(clustersNeeded, cb);
+            else cb();
         });
     };
     

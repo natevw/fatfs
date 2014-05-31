@@ -73,6 +73,7 @@ if (e) console.log(e.stack);
                 });
                 // now, overwrite the same file and make sure that goes well too
                 fs.writeFile(file, Buffer([0x42]), function (e) {
+if (e) console.error(e.stack);
                     assert(!e, "Still no error from fs.writeFile");
                     fs.readdir(BASE_DIR, function (e, arr) {
                         assert(!e, "No error from fs.readdir");
