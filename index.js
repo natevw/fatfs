@@ -155,6 +155,12 @@ exports.createFileSystem = function (volume, bootSector) {
         });
     }, (_n_ === '_nested_')); };
     
+    fs.fsync = function (fd, cb) {
+        // NOTE: we'll need to flush write cache here once we have one…
+        var _fd = fileDescriptors[fd];
+        if (!_fd) _.delayedCall(cb, S.err.BADF());
+        else _.delayedCall(cb);
+    };
     
     fs.close = function (fd, cb) {
         var _fd = fileDescriptors[fd];

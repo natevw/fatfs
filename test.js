@@ -18,7 +18,7 @@ function startTests(imagePath) {
     var fatfs = require("./index.js"),
         vol = require("./img_volume.js").createDriverSync(imagePath),
         fs = fatfs.createFileSystem(vol);
-        
+    
     [
         //'rename',
         'ftruncate','truncate',
@@ -27,8 +27,8 @@ function startTests(imagePath) {
         'link','symlink','readlink','realpath',
         //'unlink','rmdir',
         'mkdir','readdir',
-        'close','open',
-        //'utimes','futimes','fsync',
+        'close','open','fsync',
+        //'utimes','futimes',
         'write','read','readFile','writeFile',
         //'appendFile',
         //'watchFile','unwatchFile','watch'
@@ -170,6 +170,12 @@ if (e) console.error(e.stack);
                     
                     var len = Buffer.byteLength(TEXT_MOD, 'utf16le'),
                         buf = new Buffer(len);
+                    fs.fsync(inStreamFD, function (e) {
+                        assert(!e, "No error from proper fsync.");
+                    });
+                    fs.fsync('garbage', function (e) {
+                        assert(e, "Expected error from garbage fsync.");
+                    });
                     fs.read(inStreamFD, buf, 0, len, 0, function (e,n,d) {
                         assert(!e, "No error reading from beginning of inStream's file descriptor.");
                         assert(n === len, "Read complete buffer at beginning of inStream's fd.");
