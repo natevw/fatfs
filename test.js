@@ -18,6 +18,18 @@ function startTests(imagePath) {
     var fatfs = require("./index.js"),
         vol = require("./img_volume.js").createDriverSync(imagePath),
         fs = fatfs.createFileSystem(vol);
+        
+    [
+        'rename','ftruncate','truncate',
+        'chown','fchown','lchown','chmod','fchmod','lchmod',
+        'stat','lstat','fstat',
+        'link','symlink','readlink','realpath',
+        'unlink','rmdir','mkdir','readdir','close','closeSync','open',
+        'utimes','futimes','fsync',
+        'write','read','readFile','writeFile','appendFile',
+        'watchFile','unwatchFile','watch'
+    ].forEach(function (method) { assert(method in fs, "fs."+method+" has implementation."); });
+    
 setTimeout(function () {            // HACK: should wait for 'ready' event or something (not implemented)
 
     var BASE_DIR = "/fat_test",
