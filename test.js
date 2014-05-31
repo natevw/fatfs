@@ -20,16 +20,17 @@ function startTests(imagePath) {
         fs = fatfs.createFileSystem(vol);
     
     [
+        'mkdir','readdir',
         //'rename','unlink','rmdir',
+        'close','open','fsync',
+        'ftruncate','truncate',
+        'write','read','readFile','writeFile', //'appendFile',
+        
         //'chown','fchown','lchown','chmod','fchmod','lchmod',
         //'utimes','futimes',
         'stat','lstat','fstat',
         'link','symlink','readlink','realpath',
-        'mkdir','readdir',
-        'close','open','fsync',
-        'ftruncate','truncate',
-        'write','read','readFile','writeFile',
-        //'appendFile',
+        
         //'watchFile','unwatchFile','watch'
     ].forEach(function (method) { assert(method in fs, "fs."+method+" has implementation."); });
     
