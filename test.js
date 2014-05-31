@@ -39,9 +39,10 @@ if (e) console.log(e.stack);
         var file = [BASE_DIR,FILENAME].join('/');
         fs.writeFile(file, TEXTDATA, function (e) {
             assert(!e, "No error from fs.writeFile");
+            startStreamTests();
             fs.readdir(BASE_DIR, function (e, arr) {
                 assert(!e, "Still no error from fs.readdir");
-                assert(arr.length === 1, "Test directory contains a single file.");
+                assert(arr.length === 2, "Test directory contains two files.");     // (ours + startStreamTests's)
                 assert(arr[0] === FILENAME, "Filename is correct.");
                 
                 fs.stat(file, function (e,d) {
@@ -59,7 +60,7 @@ if (e) console.log(e.stack);
                     assert(!e, "Still no error from fs.writeFile");
                     fs.readdir(BASE_DIR, function (e, arr) {
                         assert(!e, "No error from fs.readdir");
-                        assert(arr.length === 1, "Test directory still contains a single file.");
+                        assert(arr.length === 2, "Test directory still contains two files.");
                         assert(arr[0] === FILENAME, "Filename still correct.");
                         fs.stat(file, function (e,d) {
                             assert(!e, "Still no error from fs.stat");
@@ -78,41 +79,42 @@ if (e) console.log(e.stack);
             });
         });
         
-        return;
-        var file2 = [BASE_DIR,FILENAME+"2"].join('/'),
-            outStream = fs.createWriteStream(file2);
-        var outStreamOpened = false;
-        outStream.on('open', function () {
-            outStreamOpened = true;
-        });
-        setTimeout(function () {
-            assert(outStreamOpened, "outStream fired 'open' event in a timely fashion.");
-        }, 1e3);
-        outStream.write(TEXTDATA+"\n");
-        outStream.write("Ο καλύτερος χρόνος να φυτευτεί ένα \ud83c\udf31 είναι δέκα έτη πριν.");
-        outStream.write("La vez del segundo mejor ahora está.\n");
-        for (var i = 0; i < 1024+42; ++i) outStream.write("123456789\n");
-        outStream.write("JavaScript how do they work\n");
-        outStream.write("The end, almost.\n");
-        outStream.end(TEXTDATA);
-        var outStreamFinished = false;
-        outStream.on('finish', function () {
-            outStreamFinished = true;
-            
-            var inStream = fs.createReadStream(file2, {start:10240, autoClose:false}),
-                gotData = false;
-            inStream.on('data', function (d) {
-                // TODO: check that file ends, and ends with TEXTDATA, etc.
-                // TODO: when done, do a read at beginning of fd and close
-                console.log(d);
+        function startStreamTests() {
+            var file2 = [BASE_DIR,FILENAME+"2"].join('/'),
+                outStream = fs.createWriteStream(file2);
+            var outStreamOpened = false;
+            outStream.on('open', function () {
+                outStreamOpened = true;
             });
             setTimeout(function () {
-                assert(gotData, "inStream fired 'data' event in a timely fashion.");
+                assert(outStreamOpened, "outStream fired 'open' event in a timely fashion.");
             }, 1e3);
-        });
-        setTimeout(function () {
-            assert(outStreamFinished, "outStream fired 'finish' event in a timely fashion.");
-        }, 5e3);
+            outStream.write(TEXTDATA+"\n");
+            outStream.write("Ο καλύτερος χρόνος να φυτευτεί ένα \ud83c\udf31 είναι δέκα έτη πριν.");
+            outStream.write("La vez del segundo mejor ahora está.\n");
+            for (var i = 0; i < 1024+42; ++i) outStream.write("123456789\n");
+            outStream.write("JavaScript how do they work\n");
+            outStream.write("The end, almost.\n");
+            outStream.end(TEXTDATA);
+            var outStreamFinished = false;
+            outStream.on('finish', function () {
+                outStreamFinished = true;
+                
+                var inStream = fs.createReadStream(file2, {start:10240, autoClose:false}),
+                    gotData = false;
+                inStream.on('data', function (d) {
+                    // TODO: check that file ends, and ends with TEXTDATA, etc.
+                    // TODO: when done, do a read at beginning of fd and close
+                    console.log(d);
+                });
+                setTimeout(function () {
+                    assert(gotData, "inStream fired 'data' event in a timely fashion.");
+                }, 1e3);
+            });
+            setTimeout(function () {
+                assert(outStreamFinished, "outStream fired 'finish' event in a timely fashion.");
+            }, 5e3);
+        }
     });
 
 }, 1e3);

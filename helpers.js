@@ -195,7 +195,7 @@ exports.adjustedPos = function (pos, bytes) {
 
 exports.extend = function (obj) {
     Array.prototype.slice.call(arguments, 1).forEach(function (ext) {
-        Object.keys(ext).forEach(function (key) {
+        if (ext) Object.keys(ext).forEach(function (key) {
             obj[key] = ext[key];
         });
     });

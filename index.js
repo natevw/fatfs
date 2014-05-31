@@ -1,4 +1,5 @@
-var fifolock = require('fifolock'),
+var streams = require('stream'),
+    fifolock = require('fifolock'),
     S = require("./structs.js"),
     _ = require("./helpers.js");
 
@@ -27,6 +28,10 @@ exports.createFileSystem = function (volume, bootSector) {
         fs._addFile = dir.addFile.bind(dir, vol);
         fs._initDir = dir.init.bind(dir, vol);
     }
+    
+    
+    
+    /**** ---- CORE API ---- ****/
     
     // NOTE: we really don't share namespace, but avoid first three anyway…
     var fileDescriptors = [null,null,null];
@@ -103,7 +108,7 @@ exports.createFileSystem = function (volume, bootSector) {
             function processNext() {
                 getNextEntry(function (e,d) {
                     if (e) cb(e);
-                    else if (!d) cb(null, entryNames);
+                    else if (!d) cb(null, entryNames.sort());       // NOTE: sort not required, but… [simplifies tests for starters!]
                     else {
                         if (d._name !== "." && d._name !== "..") entryNames.push(d._name);
                         processNext();
@@ -144,6 +149,106 @@ exports.createFileSystem = function (volume, bootSector) {
         else _.delayedCall(cb, fileDescriptors[fd] = null);
     };
     
+    
+    
+    /* STREAM WRAPPERS */
+    
+    function _createStream(StreamType, path, opts) {
+        var fd = (opts.fd !== null) ? opts.fd : '_opening_',
+            pos = opts.start,
+            stream = new StreamType(opts);
+        
+        if (fd === '_opening_') fs.open(path, opts.flags, opts.mode, function (e,fd) {
+            if (e) {
+                fd = '_open_error_';
+                stream.emit('error', e);
+            } else {
+                fd = fd;
+                stream.emit('open', fd);
+            }
+        });
+        
+        function autoClose(tombstone) {      // NOTE: assumes caller will clear `fd`
+            if (opts.autoClose) fs.close(fd, function (e) {
+                if (e) stream.emit('error', e);
+                else stream.emit('close');
+            });
+            fd = tombstone;
+        }
+        
+        if (StreamType === streams.Readable) {
+            
+            stream._read = function (n) {
+                var buf;
+                // TODO: optimize to fetch at least a full sector regardless of `n`…
+                n = Math.min(n, opts.end-pos);
+                if (fd === '_opening_') stream.once('open', function () { stream._read(n); });
+                else if (pos > opts.end) stream.push(null);
+                else if (n > 0) buf = new Buffer(n), fs.read(fd, buf, 0, n, pos, function (e,n,d) {
+                    if (e) {
+                        autoClose('_read_error_');
+                        stream.emit('error', e);
+                    } else stream.push((n) ? d.slice(0,n) : null);
+                }), pos += n;
+                else stream.push(null);
+            };
+            
+            stream.once('end', function () {
+                autoClose('_ended_');
+            });
+            
+        } else if (StreamType === streams.Writable) {
+            
+            stream.bytesWritten = 0;
+            
+            stream._write = function (data, _enc, cb) {
+                if (fd === '_opening_') stream.once('open', function () { stream._write(data, null, cb); });
+                else fs.write(fd, data, 0, data.length, pos, function (e,n) {
+                    if (e) {
+                        autoClose('_write_error_');
+                        cb(e);
+                    } else {
+                        stream.bytesWritten += n;
+                        cb();
+                    }
+                }), pos += data.length;
+            };
+            
+            stream.once('finish', function () {
+                autoClose('_finished_');
+            });
+            
+        }
+else { console.error("WHATTTTTTT?", StreamType); }
+        
+        return stream;
+    }
+    
+    fs.createReadStream = function (path, opts) {
+        return _createStream(streams.Readable, path, _.extend({
+            start: 0,
+            end: Infinity,
+            flags: 'r',
+            mode: 0666,
+            encoding: null,
+            fd: null,           // ??? see https://github.com/joyent/node/issues/7708
+            autoClose: true
+        }, opts));
+    };
+    
+    fs.createWriteStream = function (path, opts) {
+        return _createStream(streams.Writable, path, _.extend({
+            start: 0,
+            flags: 'w',
+            mode: 0666,
+            //encoding: null,   // see https://github.com/joyent/node/issues/7710
+            fd: null,           // ??? see https://github.com/joyent/node/issues/7708
+            autoClose: true
+        }, opts, {decodeStrings:true, objectMode:false}));
+    };
+    
+    
+    /* PATH WRAPPERS (albeit the only public interface for some folder operations) */
     
     function _fdOperation(path, opts, fn, cb) { cb = GROUP(cb, function () {
         fs.open(path, opts.flag, function (e,fd) {
