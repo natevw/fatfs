@@ -20,15 +20,14 @@ function startTests(imagePath) {
         fs = fatfs.createFileSystem(vol);
     
     [
-        //'rename',
-        'ftruncate','truncate',
+        //'rename','unlink','rmdir',
         //'chown','fchown','lchown','chmod','fchmod','lchmod',
+        //'utimes','futimes',
         'stat','lstat','fstat',
         'link','symlink','readlink','realpath',
-        //'unlink','rmdir',
         'mkdir','readdir',
         'close','open','fsync',
-        //'utimes','futimes',
+        'ftruncate','truncate',
         'write','read','readFile','writeFile',
         //'appendFile',
         //'watchFile','unwatchFile','watch'
