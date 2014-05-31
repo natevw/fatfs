@@ -350,7 +350,7 @@ exports.createFileSystem = function (volume, bootSector) {
     };
     
     fs.readlink = function (path, cb) {
-        _fdOperation(path, {flag:'r'}, function (fd, cb) {
+        _fdOperation(path, {flag:'\\r'}, function (fd, cb) {
             // the named file is *never* a symbolic link…
             // NOTE: we still use _fdOperation for catching e.g. NOENT/NOTDIR errors…
             cb(S.err.INVAL());
