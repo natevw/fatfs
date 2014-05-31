@@ -158,12 +158,12 @@ exports.createFileSystem = function (volume, bootSector) {
             pos = opts.start,
             stream = new StreamType(opts);
         
-        if (fd === '_opening_') fs.open(path, opts.flags, opts.mode, function (e,fd) {
+        if (fd === '_opening_') fs.open(path, opts.flags, opts.mode, function (e,_fd) {
             if (e) {
                 fd = '_open_error_';
                 stream.emit('error', e);
             } else {
-                fd = fd;
+                fd = _fd;
                 stream.emit('open', fd);
             }
         });
@@ -219,7 +219,6 @@ exports.createFileSystem = function (volume, bootSector) {
             });
             
         }
-else { console.error("WHATTTTTTT?", StreamType); }
         
         return stream;
     }
