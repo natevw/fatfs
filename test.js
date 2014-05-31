@@ -24,7 +24,7 @@ function startTests(imagePath) {
         'ftruncate','truncate',
         //'chown','fchown','lchown','chmod','fchmod','lchmod',
         'stat','lstat','fstat',
-        //'link','symlink','readlink','realpath',
+        'link','symlink','readlink','realpath',
         //'unlink','rmdir',
         'mkdir','readdir',
         'close','open',
@@ -56,6 +56,18 @@ if (e) console.log(e.stack);
         fs.writeFile(file, TEXTDATA, function (e) {
             assert(!e, "No error from fs.writeFile");
             startStreamTests();
+            fs.realpath(file, function (e,path) {
+                assert(!e, "No error from basic fs.realpath call.");
+                assert(path === file, "We already had the real path.");
+            });
+            fs.realpath([BASE_DIR,".","garbage",".","..",FILENAME].join('/'), function (e,path) {
+                assert(!e, "No error from fluffy fs.realpath call.");
+                assert(path === file, "Fixed fluffy path matches normal one.");
+            });
+            fs.realpath([BASE_DIR,"non","existent","path"].join('/'), function (e) {
+                assert(e, "Expected error calling fs.realpath on non-existent file.");
+            });
+            
             fs.readdir(BASE_DIR, function (e, arr) {
                 assert(!e, "Still no error from fs.readdir");
                 assert(arr.length === 2, "Test directory contains two files.");     // (ours + startStreamTests's)

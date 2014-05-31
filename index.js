@@ -163,7 +163,6 @@ exports.createFileSystem = function (volume, bootSector) {
     };
     
     
-    
     /* STREAM WRAPPERS */
     
     function _createStream(StreamType, path, opts) {
@@ -333,6 +332,42 @@ exports.createFileSystem = function (volume, bootSector) {
             fs._mkdir(fd, cb, '_nested_');
         }, cb);
     }
+    
+    
+    /* STUBS */
+    
+    fs.link = function (src, dst, cb) {
+        // NOTE: theoretically we _could_ do hard links [with untracked `stat.nlink` count…]
+        _.delayedCall(cb, S.err.NOSYS());
+    };
+    
+    fs.symlink = function (src, dst, type, cb) {
+        if (typeof type === 'function') {
+            cb = type;
+            type = null;
+        }
+        _.delayedCall(cb, S.err.NOSYS());
+    };
+    
+    fs.readlink = function (path, cb) {
+        _fdOperation(path, {flag:'r'}, function (fd, cb) {
+            // the named file is *never* a symbolic link…
+            // NOTE: we still use _fdOperation for catching e.g. NOENT/NOTDIR errors…
+            cb(S.err.INVAL());
+        }, cb);
+    };
+    
+    fs.realpath = function (path, cache, cb) {
+        if (typeof cache === 'function') {
+            cb = cache;
+            cache = null;
+        }
+        if (cache) _.delayedCall(cb, S.err.NOSYS());        // TODO: what would be involved here?
+        else _fdOperation(path, {flag:'\\r'}, function (fd, cb) {
+            cb(null, '/'+_.absoluteSteps(path).join('/'));
+        }, cb);
+    };
+    
     
     return fs;
 }

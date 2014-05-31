@@ -152,6 +152,7 @@ var _errors = {
     EXIST: "File exists",
     ISDIR: "Is a directory",
     ACCES: "Permission denied",
+    NOSYS: "Function not implemented",
     _TODO: "Not implemented yet!"
 };
 
