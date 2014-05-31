@@ -94,6 +94,8 @@ dir.iterator = function (dirChain, opts) {
                     bestName = (ext) ? nam+'.'+ext : nam;
                 }
                 entry._name = bestName;
+                entry._size = entry.FileSize;
+                entry._firstCluster = (entry.FstClusHI << 16) + entry.FstClusLO;
                 long = null;
                 return cb(null, entry, entryPos);
             } else long = null;
@@ -109,13 +111,14 @@ dir.iterator = function (dirChain, opts) {
 };
 
 function _updateEntry(entry, newStats) {
-    if ('size' in newStats) entry.FileSize = newStats.size;
+    if ('size' in newStats) entry._size = entry.FileSize = newStats.size;
     if ('archive' in newStats) entry.Attr.archive = true;           // TODO: also via newStats.mode?
     if ('mtime' in newStats) ;      // TODO
     if ('atime' in newStats) ;      // TODO
     if ('firstCluster' in newStats) {
         entry.FstClusLO = newStats.firstCluster & 0xFFFF;
         entry.FstClusHI = newStats.firstCluster >>> 16;
+        entry._firstCluster = newStats.firstCluster;
     }
     return entry;
 }
@@ -153,7 +156,8 @@ dir.addFile = function (vol, dirChain, name, opts, cb) {
         FstClusHI: 0,
         FstClusLO: 0,
         FileSize: 0,
-        _name: name
+        _name: name,
+        _size: 0
     });
     if (1 || short.lossy) {         // HACK: always write long names until short.lossy more useful!
         // name entries should be 0x0000-terminated and 0xFFFF-filled
@@ -245,7 +249,7 @@ dir.addFile = function (vol, dirChain, name, opts, cb) {
             dirChain.writeToPosition(d.target, entriesData, function (e) {
                 // TODO: if we get error, what/should we clean up?
                 if (e) cb(e);
-                else cb(null, _.makeStat(vol,mainEntry), vol.chainForCluster(fileCluster, dirChain));
+                else cb(null, mainEntry, vol.chainForCluster(fileCluster, dirChain));
             });
         });
     });
@@ -257,7 +261,7 @@ dir._findInDirectory = function (vol, dirChain, name, cb) {
         next = next(function (e, d) {
             if (e) cb(e);
             else if (!d) cb(S.err.NOENT());
-            else if (d._name.toUpperCase() === name) return cb(null, _.makeStat(vol,d));
+            else if (d._name.toUpperCase() === name) return cb(null, d);
             else processNext(next);
         });
     }
@@ -269,31 +273,31 @@ dir.entryForPath = function (vol, path, cb) {
     function findNext(chain) {
         var name = spets.pop();
 //console.log("Looking in", chain, "for:", name);
-        if (!name) cb(null, _.makeStat(vol, {
-            // TODO: *real* fake stats for root directory
+        if (!name) cb(null, {
+            // TODO: *real* fake entry for root directory
             Attr: {directory:true}, FileSize: 0
-        }), chain);
-        else dir._findInDirectory(vol, chain, name, function (e,stats) {
+        }, chain);
+        else dir._findInDirectory(vol, chain, name, function (e,entry) {
             if (e) cb(e, (spets.length) ? null : {_missingFile:name}, chain);
             else {
-                var _chain = vol.chainForCluster(stats._('firstCluster'));
+                var _chain = vol.chainForCluster(entry._firstCluster);
                 if (spets.length) {
-                    if (stats.isDirectory()) findNext(_chain);
+                    if (entry.Attr.directory) findNext(_chain);
                     else cb(S.err.NOTDIR());
                 }
-                else cb(null, stats, _chain);
+                else cb(null, entry, _chain);
             }
         });
     }
     findNext(vol.rootDirectoryChain);
 };
 
-dir.updateEntry = function (vol, dirEntry, newStats, cb) {
-    if (!dirEntry._pos || !dirEntry._pos.chain) throw Error("Entry source unknown!");
+dir.updateEntry = function (vol, entry, newStats, cb) {
+    if (!entry._pos || !entry._pos.chain) throw Error("Entry source unknown!");
     
-    var entryPos = dirEntry._pos,
+    var entryPos = entry._pos,
         chain = vol.chainFromJSON(entryPos.chain),          // TODO: fix
-        newEntry = _updateEntry(_.extend({}, dirEntry), newStats),
+        newEntry = _updateEntry(entry, newStats),
         data = S.dirEntry.bytesFromValue(newEntry);
 //console.log("UPDATING ENTRY", newStats, newEntry, entryPos, data);
     chain.writeToPosition(entryPos, data, function (e) {

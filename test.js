@@ -65,6 +65,7 @@ if (e) console.log(e.stack);
                     assert(!e, "No error from fs.stat");
                     assert(d.isFile() === true, "Result is a file…");
                     assert(d.isDirectory() === false, "…and not a directory.");
+console.log("???", d);
                     assert(d.size === Buffer.byteLength(TEXTDATA), "Size matches length of content written.");
                 });
                 fs.readFile(file, {encoding:'utf8'}, function (e, d) {

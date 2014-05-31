@@ -144,15 +144,9 @@ exports.delayedCall = function (fn) {
 
 // TODO: return an actual `instanceof fs.Stat` somehow?
 exports.makeStat = function (vol, dirEntry) {
-    var stats = {},
-        _ = {};
+    var stats = {};
     
-    stats._ = function (k) {
-        return _[k];
-    }
-    _.entry = dirEntry,
-    _.firstCluster = (dirEntry.FstClusHI << 16) + dirEntry.FstClusLO;;
-    
+    dirEntry = exports.extend({}, dirEntry);        // copy original so we stay fixed
     
     stats.isFile = function () {
         return (!dirEntry.Attr.volume_id && !dirEntry.Attr.directory);

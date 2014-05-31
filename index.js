@@ -43,29 +43,29 @@ exports.createFileSystem = function (volume, bootSector) {
             mode = 0666;
         }
     cb = GROUP(cb, function () {
-        var _fd = {flags:null,stats:null,chain:null,pos:0},
+        var _fd = {flags:null,entry:null,chain:null,pos:0},
             f = _.parseFlags(flags);
         if (!volume.writeSector && (f.write || f.create || f.truncate)) return _.delayedCall(cb, S.err.ROFS());
         else _fd.flags = f;
         
-        fs._entryForPath(path, function (e,stats,chain) {
-            if (e && !(e.code === 'NOENT' && f.create && stats)) cb(e);
-            else if (e) fs._addFile(chain, stats._missingFile, {dir:f._openDir}, function (e,newStats,newChain) {
+        fs._entryForPath(path, function (e,entry,chain) {
+            if (e && !(e.code === 'NOENT' && f.create && entry)) cb(e);
+            else if (e) fs._addFile(chain, entry._missingFile, {dir:f._openDir}, function (e,newEntry,newChain) {
                 if (e) cb(e);
-                else finish(newStats, newChain);
+                else finish(newEntry, newChain);
             });
-            else if (stats && f.exclusive) cb(S.err.EXIST());
-            else if (stats.isDirectory() && !f._openDir) cb(S.err.ISDIR());
-            else if (f.write && stats._('entry').Attr.readonly) cb(S.err.ACCES());          // TODO: use stats.mode when mappings settled
-            else finish(stats,chain);
-            function finish(fileStats,fileChain) {
-                _fd.stats = fileStats;
+            else if (entry && f.exclusive) cb(S.err.EXIST());
+            else if (entry.Attr.directory && !f._openDir) cb(S.err.ISDIR());
+            else if (f.write && entry.Attr.readonly) cb(S.err.ACCES());
+            else finish(entry,chain);
+            function finish(fileEntry,fileChain) {
+                _fd.entry = fileEntry;
                 _fd.chain = fileChain;
-                if (f.truncate && _fd.stats.size) {
+                if (f.truncate && _fd.entry._size) {
                     var fd = fileDescriptors.push(_fd)-1;
                     fs.ftruncate(fd, 0, function (e) {
                         cb(e, fd);
-                    });
+                    }, '_nested_');
                 }
                 else cb(null, fileDescriptors.push(_fd)-1);
             }
@@ -75,7 +75,7 @@ exports.createFileSystem = function (volume, bootSector) {
     fs.fstat = function (fd, cb, _n_) { cb = GROUP(cb, function () {
         var _fd = fileDescriptors[fd];
         if (!_fd) _.delayedCall(cb, S.err.BADF());
-        else _.delayedCall(cb, null, _fd.stats);
+        else _.delayedCall(cb, null, _.makeStat(vol, _fd.entry));
     }, (_n_ === '_nested_')); };
     
     fs.read = function (fd, buf, off, len, pos, cb, _n_) { cb = GROUP(cb, function () {
@@ -83,15 +83,14 @@ exports.createFileSystem = function (volume, bootSector) {
         if (!_fd || !_fd.flags.read) _.delayedCall(cb, S.err.BADF());
         
         var _pos = (pos === null) ? _fd.pos : pos,
-            _len = Math.min(len, _fd.stats.size - _pos),
+            _len = Math.min(len, _fd.entry._size - _pos),
             _buf = buf.slice(off,off+_len);
         _fd.chain.readFromPosition(_pos, _buf, function (e,bytes,slice) {
             if (_.workaroundTessel380) _buf.copy(buf,off);        // WORKAROUND: https://github.com/tessel/beta/issues/380
             _fd.pos = _pos + bytes;
             if (e || volume.noatime) finish(e);
-            else fs._updateEntry(_fd.stats._('entry'), {atime:new Date()}, finish);
+            else fs._updateEntry(_fd.entry, {atime:new Date()}, finish);
             function finish(e) {
-                // TODO: update _fd.stats
                 cb(e,bytes,buf);
             }
         });
@@ -132,11 +131,10 @@ exports.createFileSystem = function (volume, bootSector) {
         _fd.chain.writeToPosition(_pos, _buf, function (e) {
             _fd.pos = _pos + len;
             var curDate = new Date(),
-                newSize = Math.max(_fd.stats.size, _fd.pos),
+                newSize = Math.max(_fd.entry._size, _fd.pos),
                 newInfo = {size:newSize,archive:true,atime:curDate,mtime:curDate};
             // TODO: figure out why this silently fails on FAT12
-            fs._updateEntry(_fd.stats._('entry'), newInfo, function (ee) {
-                // TODO: update _fd.stats
+            fs._updateEntry(_fd.entry, newInfo, function (ee) {
                 cb(e||ee, len, buf);
             });
         });
@@ -147,12 +145,9 @@ exports.createFileSystem = function (volume, bootSector) {
         if (!_fd) _.delayedCall(cb, S.err.BADF());
         
         var curDate = new Date();
-        fs._updateEntry(_fd.stats._('entry'), {size:len,archive:true,atime:curDate,mtime:curDate}, function (e, newEntry) {
+        fs._updateEntry(_fd.entry, {size:len,archive:true,atime:curDate,mtime:curDate}, function (e, newEntry) {
             if (e) cb(e);
-            else {
-                _fd.stats = _.makeStat(newEntry);
-                _fd.chain.truncate(Math.ceil(len / _fd.chain.sectorSize), cb);
-            }
+            else _fd.chain.truncate(Math.ceil(len / _fd.chain.sectorSize), cb);
         });
     }, (_n_ === '_nested_')); };
     
