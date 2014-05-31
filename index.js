@@ -87,7 +87,8 @@ exports.createFileSystem = function (volume, bootSector) {
         if (!_fd || !_fd.flags.read) _.delayedCall(cb, S.err.BADF());
         
         var _pos = (pos === null) ? _fd.pos : pos,
-            _buf = buf.slice(off,off+len);
+            _len = Math.min(len, _fd.stats.size - _pos),
+            _buf = buf.slice(off,off+_len);
         _fd.chain.readFromPosition(_pos, _buf, function (e,bytes,slice) {
             if (_.workaroundTessel380) _buf.copy(buf,off);        // WORKAROUND: https://github.com/tessel/beta/issues/380
             _fd.pos = _pos + bytes;

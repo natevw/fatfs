@@ -126,9 +126,6 @@ if (e) console.log(e.stack);
                 inStream.on('data', function (d) {
                     gotData = true;
                     assert(typeof d === 'string', "Data returned as string.");
-console.log("orig:", JSON.stringify(d));            // aha! it's returning content past the end of the file…
-console.log("chop:", d.slice(-TEXTDATA.length), -TEXTDATA.length, d.length);
-console.log("want:", TEXTDATA);
                     assert(d.slice(-TEXTDATA.length) === TEXTDATA, "End of file matches what was written.");
                 });
                 inStream.on('end', function () {
