@@ -24,7 +24,7 @@ function startTests(imagePath) {
         //'rename','unlink','rmdir',
         'close','open','fsync',
         'ftruncate','truncate',
-        'write','read','readFile','writeFile', //'appendFile',
+        'write','read','readFile','writeFile', 'appendFile',
         
         //'chown','fchown','lchown','chmod','fchmod','lchmod',
         //'utimes','futimes',
@@ -121,6 +121,7 @@ if (e) console.error(e.stack);
                                             assert(d[0] === 0x42, "First byte is still correct.");
                                             assert(d[1] === 0x00, "Second byte is still correct.");
                                             assert(d[2] === 0x00, "Third byte is still correct.");
+                                            proceedWithMoreTests();
                                         });
                                     }); 
                                 });
@@ -131,6 +132,55 @@ if (e) console.error(e.stack);
                 });
             });
         });
+        
+        
+        function proceedWithMoreTests() {
+            var fd;
+            fs.open(file, 'r', function (e, _fd) {
+                assert(!e, "No error from fs.open.");
+                fd = _fd;
+            });
+            var was = "\u0042\u0000\u0000",
+                str = "abc";
+            fs.appendFile(file, str, function (e) {
+                assert(!e, "No error from fs.appendFile.");
+                assert(fd, "File descriptor opened before appendFile called.");
+                // TODO: this test (rightly!) fails; fd._entry does not get updated by the other call's updateEntry…ruh roh!
+//                var buf = new Buffer(str.length);
+//                fs.read(fd, buf, 0, buf.length, was.length, function (e,n,d) {
+//                    assert(!e, "No error from fs.read after append.");
+//                    assert(n === str.length, "All appended data was readable.");
+//                    assert(d === buf, "Buffer returned from fs.read matched what was passed in.");
+//                    assert(d.toString() === str);
+//                });
+            });
+            fs.readFile(file, {encoding:'ascii'}, function (e,d) {
+                assert(!e, "No error from fs.appendFile.");
+                assert(d.length === 6, "Read is correct size after append.");
+                // TODO: finish (append one more time?)
+                assert(d === was+str, "Read string matches what was written and then appended.");
+                
+                fs.open(file, 'a', function (e, fd2) {
+                    assert(!e, "No error from second open of file.");
+                    var str2 = "zyx",
+                        buf2 = Buffer(str2.length+1);
+                    buf2.write(str2, 1);
+                    fs.write(fd2, buf2, 1, buf2.length-1, was.length, function (e,n,d) {
+                        assert(!e, "No error from appending fs.write.");
+                        assert(n === buf2.length-1, "Wrote proper amount from buffer.");
+                        assert(d === buf2, "Returned original buffer.");
+                        
+                        // TODO: check that the write did NOT happen at requested position (atop `str`) but at end of file!
+//                        buf2.fill(0);
+//                        fs.readFile(fd, buf2, 2, buf2.length-2, was.length, function (e,n,d) {
+//                            assert(!e, "No error from appending read.");
+//                            assert(n === buf2.length-2, "Read proper amount into buffer.");
+//                            
+//                        });
+                    });
+                });
+            });
+        }
         
         function startStreamTests() {
             var file2 = [BASE_DIR,FILENAME+"2"].join('/'),

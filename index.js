@@ -62,6 +62,7 @@ exports.createFileSystem = function (volume, bootSector) {
                 var fd = fileDescriptors.push(_fd)-1;
                 _fd.entry = fileEntry;
                 _fd.chain = fileChain;
+                if (f.append) _fd.pos = _fd.entry._size;
                 if (f.truncate && _fd.entry._size) fs.ftruncate(fd, 0, function (e) {
                     cb(e, fd);
                 }, '_nested_');
@@ -80,7 +81,7 @@ exports.createFileSystem = function (volume, bootSector) {
         var _fd = fileDescriptors[fd];
         if (!_fd || !_fd.flags.read) _.delayedCall(cb, S.err.BADF());
         
-        var _pos = (pos === null) ? _fd.pos : pos,
+        var _pos = (pos === null || _fd.flags.append) ? _fd.pos : pos,
             _len = Math.min(len, _fd.entry._size - _pos),
             _buf = buf.slice(off,off+_len);
         _fd.chain.readFromPosition(_pos, _buf, function (e,bytes,slice) {
@@ -315,6 +316,15 @@ exports.createFileSystem = function (volume, bootSector) {
             if (typeof data === 'string') data = new Buffer(data, opts.encoding || 'utf8');
             fs.write(fd, data, 0, data.length, null, function (e) { cb(e); }, '_nested_');
         }, cb);
+    };
+    
+    fs.appendFile = function (path, data, opts, cb) {
+        if (typeof opts === 'function') {
+            cb = opts;
+            opts = {};
+        }
+        opts.flag || (opts.flag = 'a');
+        fs.writeFile(path, data, opts, cb);
     };
     
     fs.truncate = function (path, len, cb) {
