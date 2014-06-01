@@ -145,14 +145,13 @@ if (e) console.error(e.stack);
             fs.appendFile(file, str, function (e) {
                 assert(!e, "No error from fs.appendFile.");
                 assert(fd, "File descriptor opened before appendFile called.");
-                // TODO: this test (rightly!) fails; fd._entry does not get updated by the other call's updateEntry…ruh roh!
-//                var buf = new Buffer(str.length);
-//                fs.read(fd, buf, 0, buf.length, was.length, function (e,n,d) {
-//                    assert(!e, "No error from fs.read after append.");
-//                    assert(n === str.length, "All appended data was readable.");
-//                    assert(d === buf, "Buffer returned from fs.read matched what was passed in.");
-//                    assert(d.toString() === str);
-//                });
+                var buf = new Buffer(str.length);
+                fs.read(fd, buf, 0, buf.length, was.length, function (e,n,d) {
+                    assert(!e, "No error from fs.read after append.");
+                    assert(n === str.length, "All appended data was readable.");
+                    assert(d === buf, "Buffer returned from fs.read matched what was passed in.");
+                    assert(d.toString() === str);
+                });
             });
             fs.readFile(file, {encoding:'ascii'}, function (e,d) {
                 assert(!e, "No error from fs.appendFile.");
@@ -170,23 +169,14 @@ if (e) console.error(e.stack);
                         assert(n === buf2.length-2, "Wrote proper amount from buffer.");
                         assert(d === buf2, "Returned original buffer.");
                         
-fs.readFile(file, function (e,d) {
-    if (e) throw e;
-    console.log("D?", JSON.stringify(d.toString('ascii')));
-});
-                        // TODO: check that the write did NOT happen at requested position (atop `str`) but at end of file!
                         buf2.fill(0);
                         buf2[0] = 0xFF;
-// WORKAROUND: same issue noted above where multiple `fd` for a single path don't get each others' entry updates
-fs.open(file, 'r', function (e, fd) {
-    if (e) throw e;
                         fs.read(fd, buf2, 1, buf2.length-1, was.length, function (e,n,d) {
                             assert(!e, "No error from twice-appended read.");
                             assert(n === buf2.length-1, "Read proper amount into buffer.");
                             assert(buf2[0] === 0xFF, "Read left first byte in buffer properly alone.");
                             assert(d.slice(1).toString() === (str+str2).slice(0, buf2.length-1), "Data was appended, not written at position.");
                         });
-});
                     });
                 });
             });

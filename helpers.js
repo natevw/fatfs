@@ -17,6 +17,10 @@ exports.absoluteSteps = function (path) {
     return steps.map(exports.longname);
 };
 
+exports.absolutePath = function (path) {
+    return '/'+exports.absoluteSteps(path).join('/');
+};
+
 exports.parseFlags = function (flags) {
     // read, write, append, create, truncate, exclusive
     var info, _dir;           // NOTE: there might be more clever ways to "parse", but…

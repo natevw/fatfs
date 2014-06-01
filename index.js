@@ -23,7 +23,27 @@ exports.createFileSystem = function (volume, bootSector) {
         vol = require("./vol.js").init(volume, bootSector);
         bootSector = null;          // allow GC
         fs._dirIterator = dir.iterator.bind(dir);
-        fs._entryForPath = dir.entryForPath.bind(dir, vol);
+        
+        //fs._entryForPath = dir.entryForPath.bind(dir, vol);
+        var entriesByPath = Object.create(null);
+        fs._registerEntry = function (k, entry, chain) {
+            entry._k = k;
+            entriesByPath[k] = {e:entry, c:chain, s:1};
+        };
+        fs._sharedEntryForPath = function (path, cb) {
+            var k = _.absolutePath(path);
+            if (k in entriesByPath) entriesByPath[k].s += 1, _.delayedCall(cb, null, entriesByPath[k].e, entriesByPath[k].c);
+            else dir.entryForPath(vol, path, function (e, entry, chain) {
+                if (!e) fs._registerEntry(k, entry, chain);
+                cb.apply(this, arguments);
+            });
+        };
+        fs._releaseEntry = function (entry) {
+            if (!entry._k) throw Error("Can't release entry not obtained via _sharedEntryForPath!");
+            var d = entriesByPath[entry._k];
+            if (!--d.s) delete entriesByPath[entry._k];
+        };
+        
         fs._updateEntry = dir.updateEntry.bind(dir, vol);
         fs._addFile = dir.addFile.bind(dir, vol);
         fs._initDir = dir.init.bind(dir, vol);
@@ -48,11 +68,11 @@ exports.createFileSystem = function (volume, bootSector) {
         if (!volume.writeSector && (f.write || f.create || f.truncate)) return _.delayedCall(cb, S.err.ROFS());
         else _fd.flags = f;
         
-        fs._entryForPath(path, function (e,entry,chain) {
+        fs._sharedEntryForPath(path, function (e,entry,chain) {
             if (e && !(e.code === 'NOENT' && f.create && entry)) cb(e);
             else if (e) fs._addFile(chain, entry._missingFile, {dir:f._openDir}, function (e,newEntry,newChain) {
                 if (e) cb(e);
-                else finish(newEntry, newChain);
+                else fs._registerEntry(_.absolutePath(path), newEntry, newChain), finish(newEntry, newChain);
             });
             else if (entry && f.exclusive) cb(S.err.EXIST());
             else if (entry.Attr.directory && !f._openDir) cb(S.err.ISDIR());
@@ -166,7 +186,7 @@ exports.createFileSystem = function (volume, bootSector) {
     fs.close = function (fd, cb) {
         var _fd = fileDescriptors[fd];
         if (!_fd) _.delayedCall(cb, S.err.BADF());
-        else _.delayedCall(cb, fileDescriptors[fd] = null);
+        else fs._releaseEntry(_fd.entry), _.delayedCall(cb, fileDescriptors[fd] = null);
     };
     
     
@@ -380,7 +400,7 @@ exports.createFileSystem = function (volume, bootSector) {
         }
         if (cache) _.delayedCall(cb, S.err.NOSYS());        // TODO: what would be involved here?
         else _fdOperation(path, {flag:'\\r'}, function (fd, cb) {
-            cb(null, '/'+_.absoluteSteps(path).join('/'));
+            cb(null, _.absolutePath(path));
         }, cb);
     };
     
