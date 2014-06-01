@@ -156,7 +156,6 @@ if (e) console.error(e.stack);
             fs.readFile(file, {encoding:'ascii'}, function (e,d) {
                 assert(!e, "No error from fs.appendFile.");
                 assert(d.length === 6, "Read is correct size after append.");
-                // TODO: finish (append one more time?)
                 assert(d === was+str, "Read string matches what was written and then appended.");
                 
                 fs.open(file, 'a', function (e, fd2) {
