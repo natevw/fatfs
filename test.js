@@ -163,20 +163,30 @@ if (e) console.error(e.stack);
                 fs.open(file, 'a', function (e, fd2) {
                     assert(!e, "No error from second open of file.");
                     var str2 = "zyx",
-                        buf2 = Buffer(str2.length+1);
+                        buf2 = Buffer(str2.length+2);
                     buf2.write(str2, 1);
-                    fs.write(fd2, buf2, 1, buf2.length-1, was.length, function (e,n,d) {
+                    fs.write(fd2, buf2, 1, buf2.length-2, was.length, function (e,n,d) {
                         assert(!e, "No error from appending fs.write.");
-                        assert(n === buf2.length-1, "Wrote proper amount from buffer.");
+                        assert(n === buf2.length-2, "Wrote proper amount from buffer.");
                         assert(d === buf2, "Returned original buffer.");
                         
+fs.readFile(file, function (e,d) {
+    if (e) throw e;
+    console.log("D?", JSON.stringify(d.toString('ascii')));
+});
                         // TODO: check that the write did NOT happen at requested position (atop `str`) but at end of file!
-//                        buf2.fill(0);
-//                        fs.readFile(fd, buf2, 2, buf2.length-2, was.length, function (e,n,d) {
-//                            assert(!e, "No error from appending read.");
-//                            assert(n === buf2.length-2, "Read proper amount into buffer.");
-//                            
-//                        });
+                        buf2.fill(0);
+                        buf2[0] = 0xFF;
+// WORKAROUND: same issue noted above where multiple `fd` for a single path don't get each others' entry updates
+fs.open(file, 'r', function (e, fd) {
+    if (e) throw e;
+                        fs.read(fd, buf2, 1, buf2.length-1, was.length, function (e,n,d) {
+                            assert(!e, "No error from twice-appended read.");
+                            assert(n === buf2.length-1, "Read proper amount into buffer.");
+                            assert(buf2[0] === 0xFF, "Read left first byte in buffer properly alone.");
+                            assert(d.slice(1).toString() === (str+str2).slice(0, buf2.length-1), "Data was appended, not written at position.");
+                        });
+});
                     });
                 });
             });

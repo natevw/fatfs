@@ -81,7 +81,7 @@ exports.createFileSystem = function (volume, bootSector) {
         var _fd = fileDescriptors[fd];
         if (!_fd || !_fd.flags.read) _.delayedCall(cb, S.err.BADF());
         
-        var _pos = (pos === null || _fd.flags.append) ? _fd.pos : pos,
+        var _pos = (pos === null) ? _fd.pos : pos,
             _len = Math.min(len, _fd.entry._size - _pos),
             _buf = buf.slice(off,off+_len);
         _fd.chain.readFromPosition(_pos, _buf, function (e,bytes,slice) {
@@ -125,7 +125,7 @@ exports.createFileSystem = function (volume, bootSector) {
         var _fd = fileDescriptors[fd];
         if (!_fd || !_fd.flags.write) _.delayedCall(cb, S.err.BADF());
         
-        var _pos = (pos === null) ? _fd.pos : pos,
+        var _pos = (pos === null || _fd.flags.append) ? _fd.pos : pos,
             _buf = buf.slice(off,off+len);
         _fd.chain.writeToPosition(_pos, _buf, function (e) {
             _fd.pos = _pos + len;
