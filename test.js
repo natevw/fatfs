@@ -12,8 +12,8 @@ else {
         console.warn(err.toString());
         //console.log(out.toString());
         testWithImage(IMG);
-console.log(IMG);
-return;
+//console.log(IMG);
+//return;
         require('fs').unlink(IMG, function (e) {
             if (e) console.warn("Error cleaning up test image", e);
         });
@@ -29,28 +29,7 @@ function testWithImage(imagePath) {
 function startTests(vol, waitTime) {
     var fatfs = require("./"),
         fs = fatfs.createFileSystem(vol);
-    
-    BASE_DIR = 'test';
-    fs.mkdir(BASE_DIR, function (e) {
-        assert(!e, "No error from fs.mkdir");
-        var F = [BASE_DIR,"Manually inspect from time to time, please!.txt"].join('/'),
-            S = 512,
-            N = 16,
-            b = new Buffer(S*N);
-        for (var i = 0; i < N; ++i) b.slice(S*i, S*i+S).fill(i.toString(16).charCodeAt(0));
-        fs.writeFile(F, b, function (e) {
-            assert(!e, "No error from fs.writeFile with counting blocks.");
-            fs.readFile(F, function (e,d) {
-                assert(!e, "No error from fs.readFile with counting blocks.");
-                assert(d.length === b.length, "Readback is correct size");
-                var matched = true;
-                for (var i = 0; i < S*N; ++i) if (b[i] !== d[i]) matched = false;
-                assert(matched, "Readback matches write byte-for-byte");
-            });
-        });
-    });
-    return;
-    
+        
     waitTime || (waitTime = 1e3);
     
     [
