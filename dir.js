@@ -231,7 +231,7 @@ dir.addFile = function (vol, dirChain, name, opts, cb) {
             var nameBuf = S.dirEntry.fields['Name'].bytesFromValue(mainEntry.Name),
                 nameSum = _.checksumName(nameBuf);
             _updateEntry(mainEntry, {firstCluster:fileCluster});
-            mainEntry._pos = _.adjustedPos(d.target, S.dirEntry.size*(entries.length-1));
+            mainEntry._pos = _.adjustedPos(vol, d.target, S.dirEntry.size*(entries.length-1));
             entries.slice(1).forEach(function (entry) {
                 entry.Chksum = nameSum;
             });

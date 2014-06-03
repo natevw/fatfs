@@ -187,13 +187,12 @@ exports.makeStat = function (vol, dirEntry) {
 };
 
 
-exports.adjustedPos = function (pos, bytes) {
+exports.adjustedPos = function (vol, pos, bytes) {
     var _pos = {
         chain: pos.chain,
         sector: pos.sector,
         offset: pos.offset + bytes
-    }, secSize = pos.chain.sectorSize;
-console.log("adjustedPos", secSize, pos.chain);
+    }, secSize = vol._sectorSize;
     while (_pos.offset > secSize) {
         _pos.sector += 1;
         _pos.offset -= secSize;
