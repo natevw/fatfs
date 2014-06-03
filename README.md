@@ -20,18 +20,33 @@ fs.stat("autoexec.bat", function (e,stats) {
 
 ## API
 
-**TBD**
+* `fs = fatfs.createFileSystem(vol)` — Simply pass in a block driver (see below) mapped to a FAT partition somewhere, and get back the API documented [here](http://nodejs.org/api/fs.html)…
 
-This will basically try to follow the ['fs' module](http://nodejs.org/api/fs.html) as far as it makes sense.
+That's it. Well, sort of…
 
-Expected differences:
-- starting with async versions only [or opposite?]
-- path will be relative to a single volume, no "mount points" or whatever yet
-- therefore, you'll need to create a sub-instance (as it were) of the module
-- FAT does not support permissions/ownership/symlinks, so none of that
-- not sure if fsync will be meaningful
-- streams will be lower priority than "the basics"
-- watch/watchFile will be low priority
+
+## Caveats
+
+## Temporary
+
+**TBD**: fix these, soon.
+
+* **BETA** **BETA** **BETA**. Seriously, this is a *brand new*, *from scratch*, *completely unproven* filesystem implementation. It does not have full automated test coverage, and it has not been manually tested very much either. Please please please **make sure you have a backup** of any important drive/image/card you unleash this upon.
+* at the moment you would/should use this via the [sdcard](https://github.com/natevw/tessel-sdcard) module; right now unless you pass in the first sector via an undocumented API you'll need to wait for an arbitrary amount of time before using any of the methods.
+* mappings between FAT concepts (hidden/readonly/archive/etc.) and POSIX modes are not yet implemented
+* date stamps are not quite hooked up
+* need options like perms mapping mode, and readonly/noatime
+* a few other methods are not quite implemented, either. If it's commented out [in this part of the test suite](https://github.com/natevw/fatfs/blob/master/test.js#L22), its implementation is Coming Soon™.
+
+
+## As-planned
+
+Some of the differences between this module and the node.js `fs` module are "by design" for arhitectural simplicity and/or due to underlying FAT limitations.
+
+* There are no `fs.*Sync` methods.
+* This module does no read/write caching. This should be done in your volume driver, but see notes below.
+* You'll need multiple `createFileSystem` instances for multiple volumes; paths are relative to each, and don't share a namespace.
+* The FAT filesystem has no concept of symlinks, and hardlinks are not really an intentional feature. You will get an ENOSYS-like error when encountering this limitation.
 
 
 ## "Volume driver" API
@@ -45,10 +60,7 @@ To use 'fatfs', you must provide a driver object with the following properties/m
 
 If you do not provide a `writeSector` method, then `fatfs` will work in readonly mode. Pretty simple, eh? And the 'fatfs' module makes a good effort to check the parameters passed to your driver methods!
 
-**TBD:** document 'noatime' property or whatever final public way of handling that may be…
 **TBD:** to facilitate proper cache handling, this module might add an optional `driver.flush(cb)` method at some point in the future.
-
-
 
 Here's an example taken from code used to run this module's own tests:
 
