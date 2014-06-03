@@ -55,7 +55,8 @@ function startTests(vol, waitTime) {
     fs.on('ready', function () {
         assert(isReady = true, "Driver is ready.");
     }).on('error', function (e) {
-        assert(false, "Driver should not error when initializing.");
+        assert(e, "If fs driver fires 'error' event, it should include error object.");
+        assert(false, "…but driver should not error when initializing in our case.");
     });
     setTimeout(function () {
         assert(isReady, "Driver fired ready event in timely fashion.");
@@ -70,7 +71,6 @@ function startTests(vol, waitTime) {
     fs.mkdir(BASE_DIR, function (e) {
         assert(!e, "No error from fs.mkdir");
         fs.readdir(BASE_DIR, function (e,arr) {
-if (e) console.log(e.stack);
             assert(!e, "No error from fs.readdir");
             assert(arr.length === 0 , "No files in BASE_DIR yet.");
         });
@@ -107,7 +107,6 @@ if (e) console.log(e.stack);
                 });
                 // now, overwrite the same file and make sure that goes well too
                 fs.writeFile(file, Buffer([0x42]), function (e) {
-if (e) console.error(e.stack);
                     assert(!e, "Still no error from fs.writeFile");
                     fs.readdir(BASE_DIR, function (e, arr) {
                         assert(!e, "No error from fs.readdir");
@@ -172,7 +171,7 @@ if (e) console.error(e.stack);
                     assert(!e, "No error from fs.read after append.");
                     assert(n === str.length, "All appended data was readable.");
                     assert(d === buf, "Buffer returned from fs.read matched what was passed in.");
-                    assert(d.toString() === str);
+                    assert(d.toString() === str, "Correct data found where expected.");
                 });
             });
             fs.readFile(file, {encoding:'ascii'}, function (e,d) {
@@ -207,8 +206,12 @@ if (e) console.error(e.stack);
             var file2 = [BASE_DIR,FILENAME+"2"].join('/'),
                 outStream = fs.createWriteStream(file2);
             var outStreamOpened = false;
-            outStream.on('open', function () {
+            outStream.on('open', function (fd) {
                 outStreamOpened = true;
+                assert(typeof fd === 'number', "Got file descriptor on fs.createWriteStream open.");
+            }).on('error', function (e) {
+                assert(e, "If fs.createWriteStream fires 'error' event, it should include error object.");
+                assert(false, "But, fs.createWriteStream should not error during these tests.");
             });
             setTimeout(function () {
                 assert(outStreamOpened, "outStream fired 'open' event in a timely fashion.");
@@ -228,7 +231,7 @@ if (e) console.error(e.stack);
                 var inStream = fs.createReadStream(file2, {start:10240, encoding:'utf16le', autoClose:false}),
                     gotData = false, gotEOF = false, inStreamFD = null;
                 inStream.on('open', function (fd) {
-                    assert(fd, "Got file descriptor");
+                    assert(typeof fd === 'number', "Got file descriptor on fs.createReadStream open.");
                     inStreamFD = fd;
                 });
                 inStream.on('data', function (d) {
@@ -271,4 +274,4 @@ if (e) console.error(e.stack);
 }
 
 
-function assert(b,msg) { if (!b) throw Error("Assertion failure. "+msg); else console.log(msg); }
+function assert(b,msg) { if (!msg) console.warn("no msg", Error().stack); if (!b) throw Error("Assertion failure. "+msg); else console.log(msg); }
