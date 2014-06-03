@@ -47,7 +47,7 @@ function startTests(vol, waitTime) {
         //'watchFile','unwatchFile','watch'
     ].forEach(function (method) { assert(method in fs, "fs."+method+" has implementation."); });
     
-    var BASE_DIR = "/fat_test",
+    var BASE_DIR = "/fat_test-"+Math.random().toFixed(20).slice(2),
         FILENAME = "Simple File.txt",
         TEXTDATA = "Hello world!";
     
