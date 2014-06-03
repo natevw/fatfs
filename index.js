@@ -204,7 +204,21 @@ exports.createFileSystem = function (volume, opts, cb) {
     
     /* STREAM WRAPPERS */
     
+    var workaroundTessel436;
+    try {
+        new require('stream').Readable({encoding:'utf8'});
+        new streams.Readable({encoding:'utf8'});
+    } catch (e) {
+        workaroundTessel436 = true;
+    }
+    
     function _createStream(StreamType, path, opts) {
+        // [NOT REALLY A] WORKAROUND: https://github.com/tessel/beta/issues/436
+        if (workaroundTessel436 && 'encoding' in opts) {
+            console.warn("Tessel does not currently support encoding option for Readable streams, discarding!");
+            delete opts.encoding;
+        }
+        
         var fd = (opts.fd !== null) ? opts.fd : '_opening_',
             pos = opts.start,
             stream = new StreamType(opts);
