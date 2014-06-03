@@ -27,9 +27,7 @@ That's it. Well, sort of…
 
 ## Caveats
 
-## Temporary
-
-**TBD**: fix these, soon.
+### Temporary
 
 * **BETA** **BETA** **BETA**. Seriously, this is a *brand new*, *from scratch*, *completely unproven* filesystem implementation. It does not have full automated test coverage, and it has not been manually tested very much either. Please please please **make sure you have a backup** of any important drive/image/card you unleash this upon.
 * at the moment you would/should use this via the [sdcard](https://github.com/natevw/tessel-sdcard) module; right now unless you pass in the first sector via an undocumented API you'll need to wait for an arbitrary amount of time before using any of the methods.
@@ -38,8 +36,7 @@ That's it. Well, sort of…
 * need options like perms mapping mode, and readonly/noatime
 * a few other methods are not quite implemented, either. If it's commented out [in this part of the test suite](https://github.com/natevw/fatfs/blob/master/test.js#L22), its implementation is Coming Soon™.
 
-
-## As-planned
+### As-planned
 
 Some of the differences between this module and the node.js `fs` module are "by design" for arhitectural simplicity and/or due to underlying FAT limitations.
 
