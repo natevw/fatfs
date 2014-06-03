@@ -112,9 +112,26 @@ dir.iterator = function (dirChain, opts) {
 
 function _updateEntry(entry, newStats) {
     if ('size' in newStats) entry._size = entry.FileSize = newStats.size;
+    
+    if ('_touch' in newStats) newStats.archive = newStats.atime = newStats.mtime = true;
     if ('archive' in newStats) entry.Attr.archive = true;           // TODO: also via newStats.mode?
-    if ('mtime' in newStats) ;      // TODO
-    if ('atime' in newStats) ;      // TODO
+    
+    var _now;
+    function applyDate(d, prefix, timeToo, tenthToo) {
+        if (d === true) d = _now || (_now = new Date());
+        entry[prefix+'Date'] = {year:d.getFullYear()-1980, month:d.getMonth()+1, day:d.getDate()};
+        if (timeToo) {
+            entry[prefix+'Time'] = {hour:d.getHours(), minute:d.getMinutes(), seconds:d.getSeconds()>>>1};
+            if (tenthToo) {
+                var msec = (d.getSeconds() % 2)*1000 + d.getMilliseconds();
+                entry[prefix+'TimeTenth'] = Math.floor(msec / 100);
+            }
+        }
+    }
+    if ('ctime' in newStats) applyDate(newStats.ctime, 'Crt', true, true);
+    if ('mtime' in newStats) applyDate(newStats.mtime, 'Wrt', true);
+    if ('atime' in newStats) applyDate(newStats.atime, 'LstAcc');
+    
     if ('firstCluster' in newStats) {
         entry.FstClusLO = newStats.firstCluster & 0xFFFF;
         entry.FstClusHI = newStats.firstCluster >>> 16;
@@ -151,13 +168,8 @@ dir.addFile = function (vol, dirChain, name, opts, cb) {
         short = _.shortname(name);
     entries.push(mainEntry = {
         Name: {filename:short.basis[0], extension:short.basis[1]},
-        // TODO: finalize initial properties… (via `opts.mode` instead?)
-        Attr: {directory:opts.dir, archive:true},
-        FstClusHI: 0,
-        FstClusLO: 0,
-        FileSize: 0,
-        _name: name,
-        _size: 0
+        Attr: {directory:opts.dir},
+        _name: name
     });
     if (1 || short.lossy) {         // HACK: always write long names until short.lossy more useful!
         // name entries should be 0x0000-terminated and 0xFFFF-filled
@@ -236,7 +248,8 @@ dir.addFile = function (vol, dirChain, name, opts, cb) {
             
             var nameBuf = S.dirEntry.fields['Name'].bytesFromValue(mainEntry.Name),
                 nameSum = _.checksumName(nameBuf);
-            _updateEntry(mainEntry, {firstCluster:fileCluster});
+            // TODO: finalize initial properties… (via `opts.mode` instead?)
+            _updateEntry(mainEntry, {firstCluster:fileCluster, size:0, ctime:true,_touch:true});
             mainEntry._pos = _.adjustedPos(vol, d.target, S.dirEntry.size*(entries.length-1));
             entries.slice(1).forEach(function (entry) {
                 entry.Chksum = nameSum;

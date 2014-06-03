@@ -60,7 +60,7 @@ var time = _.struct([
     _.ubit('seconds',5)
 ]);
 
-var date = _.struct('date', [
+var date = _.struct([
     _.ubit('year',7),
     _.ubit('month',4),
     _.ubit('day',5)

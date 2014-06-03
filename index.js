@@ -162,7 +162,7 @@ exports.createFileSystem = function (volume, opts, cb) {
         _fd.chain.writeToPosition(_pos, _buf, function (e) {
             _fd.pos = _pos + len;
             var newSize = Math.max(_fd.entry._size, _fd.pos),
-                newInfo = {size:newSize,archive:true,atime:true,mtime:true};
+                newInfo = {size:newSize,_touch:true};
             // TODO: figure out why this silently fails on FAT12
             fs._updateEntry(_fd.entry, newInfo, function (ee) {
                 cb(e||ee, len, buf);
@@ -175,7 +175,7 @@ exports.createFileSystem = function (volume, opts, cb) {
         if (!_fd || !_fd.flags.write) _.delayedCall(cb, S.err.BADF());
         
         var numSectors = Math.ceil(len / _fd.chain.sectorSize),
-            newStats = {size:len,archive:true,atime:true,mtime:true};
+            newStats = {size:len,_touch:true};
         // NOTE: we order operations for best state in case of only partial success
         if (len === _fd.entry._size) _.delayedCall(cb);
         else if (len < _fd.entry._size) fs._updateEntry(_fd.entry, newStats, function (e) {
