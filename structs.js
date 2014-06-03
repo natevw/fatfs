@@ -100,13 +100,13 @@ exports.lastLongFlag = 0x40;
 exports.longDirFlag = 0x0F;
 exports.longDirEntry = _.struct([
     _.uint8('Ord'),
-    _.char16le('Name1', 5),            // NOTE: byte instead of char for UTF16
+    _.char16le('Name1', 10),
     _.uint8('Attr'),
     _.uint8('Type'),
     _.uint8('Chksum'),
-    _.char16le('Name2', 6),
+    _.char16le('Name2', 12),
     _.uint16le('FstClusLO'),
-    _.char16le('Name3', 2)
+    _.char16le('Name3', 4)
 ]);
 
 if (exports.longDirEntry.size !== exports.dirEntry.size) throw Error("Structs ain't right!");
