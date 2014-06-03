@@ -80,9 +80,9 @@ exports.init = function (volume, bootSector) {
             var status = info.struct.valueFromBytes(d), prefix;
             if (fatType === 'fat12') {
                 if (clusterNum % 2) {
-                    status = (status.field0a << 8) + status.field0bc;
-                } else {
                     status = (status.field1ab << 4) + status.field1c;
+                } else {
+                    status = (status.field0a << 8) + status.field0bc;
                 }
             }
             else if (fatType === 'fat32') {
@@ -109,11 +109,11 @@ exports.init = function (volume, bootSector) {
         if (fatType === 'fat12') fatChain.readFromPosition(info, info.struct.size, function (e,n,d) {
             var value = info.struct.valueFromBytes(d);
             if (clusterNum % 2) {
-                value.field0a = status >>> 8;
-                value.field0bc = status & 0xFF;
-            } else {
                 value.field1ab = status >>> 4;
                 value.field1c = status & 0x0F;
+            } else {
+                value.field0a = status >>> 8;
+                value.field0bc = status & 0xFF;
             }
             var entry = info.struct.bytesFromValue(value);
             fatChain.writeToPosition(info, entry, cb);
