@@ -135,6 +135,7 @@ exports.createFileSystem = function (volume, opts, cb) {
             function processNext() {
                 getNextEntry(function (e,d) {
                     if (e) cb(e);
+                    else if (!d && !entryNames.length) cb(null, entryNames); // WORKAROUND: https://github.com/tessel/beta/issues/435
                     else if (!d) cb(null, entryNames.sort());       // NOTE: sort not required, but… [simplifies tests for starters!]
                     else {
                         if (d._name !== "." && d._name !== "..") entryNames.push(d._name);

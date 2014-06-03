@@ -42,14 +42,14 @@ exports.init = function (volume, bootSector) {
     };
     
     vol._readSector = function (secNum, cb) {
-console.log("_readSector", secNum);
+//console.log("_readSector", secNum);
 //console.log("_readSector", secNum, Error().stack);
         if (secNum < volume.numSectors) volume.readSector(secNum, cb);
         else throw Error("Invalid sector number!");
     };
     
     vol._writeSector = function (secNum, data, cb) {
-console.log("_writeSector", secNum);
+//console.log("_writeSector", secNum);
 //console.log("_writeSector", secNum, Error().stack);
 //console.log("_writeSector of", data.length, "bytes to sector", secNum);
         // NOTE: these are internal assertions, public API will get proper `S.err`s
