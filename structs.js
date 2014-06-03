@@ -123,8 +123,8 @@ exports.fatField = {
 };
 
 exports.fatPrefix = {
-    'fat12': 0x000,
-    'fat16': 0xff00,
+    'fat12': 0xF00,
+    'fat16': 0xFF00,
     'fat32': 0x0FFFFF00
 };
 
