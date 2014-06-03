@@ -26,9 +26,11 @@ function testWithImage(imagePath) {
 }
 
 
-function startTests(vol) {
+function startTests(vol, waitTime) {
     var fatfs = require("./"),
         fs = fatfs.createFileSystem(vol);
+    
+    waitTime || (waitTime = 1e3);
     
     [
         'mkdir','readdir',
@@ -51,15 +53,16 @@ function startTests(vol) {
     
     var isReady = false;
     fs.on('ready', function () {
-        isReady = true;
+        assert(isReady = true, "Driver is ready.");
     }).on('error', function (e) {
         assert(false, "Driver should not error when initializing.");
     });
     setTimeout(function () {
         assert(isReady, "Driver fired ready event in timely fashion.");
-    }, 1e3);
+    }, waitTime);
     
     fs.readdir("/", function (e,files) {
+        assert(isReady, "Method completed after 'ready' event.");
         assert(!e, "No error reading root directory.");
         assert(Array.isArray(files), "Got a list of files: "+files);
     });
@@ -209,7 +212,7 @@ if (e) console.error(e.stack);
             });
             setTimeout(function () {
                 assert(outStreamOpened, "outStream fired 'open' event in a timely fashion.");
-            }, 1e3);
+            }, waitTime);
             var TEXT_MOD = TEXTDATA.toLowerCase()+"\n";
             outStream.write(TEXT_MOD, 'utf16le');
             outStream.write("Ο καλύτερος χρόνος να φυτευτεί ένα \ud83c\udf31 είναι δέκα έτη πριν.", 'utf16le');
@@ -257,12 +260,12 @@ if (e) console.error(e.stack);
                     assert(gotData, "inStream fired 'data' event in a timely fashion.");
                     setTimeout(function () {
                         assert(gotEOF, "inStream fired 'eof' event in a timely fashion.");
-                    }, 1e3);
-                }, 1e3);
+                    }, waitTime);
+                }, waitTime);
             });
             setTimeout(function () {
                 assert(outStreamFinished, "outStream fired 'finish' event in a timely fashion.");
-            }, 2e3);
+            }, 2*waitTime);
         }
     });
 }

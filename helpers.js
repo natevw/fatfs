@@ -7,6 +7,15 @@ exports.workaroundTessel380 = function () {
     return ((s[0] = 0xFF) !== b[0]);
 }();
 
+
+// WORKAROUND: https://github.com/tessel/beta/issues/433
+var oldslice;
+if (Buffer(5).slice(10).length < 0) oldslice = Buffer.prototype.slice, Buffer.prototype.slice = function (s, e) {
+    if (s > this.length) s = this.length;
+    // ~WORKAROUND: https://github.com/tessel/beta/issues/434
+    return (arguments.length > 1) ? oldslice.call(this, s, e) : oldslice.call(this, s);
+}
+
 exports.absoluteSteps = function (path) {
     var steps = [];
     path.split('/').forEach(function (str) {
@@ -184,6 +193,7 @@ exports.adjustedPos = function (pos, bytes) {
         sector: pos.sector,
         offset: pos.offset + bytes
     }, secSize = pos.chain.sectorSize;
+console.log("adjustedPos", secSize, pos.chain);
     while (_pos.offset > secSize) {
         _pos.sector += 1;
         _pos.offset -= secSize;
