@@ -216,11 +216,12 @@ function startTests(vol, waitTime) {
             setTimeout(function () {
                 assert(outStreamOpened, "outStream fired 'open' event in a timely fashion.");
             }, waitTime);
-            var TEXT_MOD = TEXTDATA.toLowerCase()+"\n";
+            var TEXT_MOD = TEXTDATA.toLowerCase()+"\n",
+                NUM_REPS = (waitTime <= 1e3) ? 1024 : 16;
             outStream.write(TEXT_MOD, 'utf16le');
             outStream.write("Ο καλύτερος χρόνος να φυτευτεί ένα \ud83c\udf31 είναι δέκα έτη πριν.", 'utf16le');
             outStream.write("La vez del segundo mejor ahora está.\n", 'utf16le');
-            for (var i = 0; i < 1024; ++i) outStream.write("123456789\n", 'ascii');
+            for (var i = 0; i < NUM_REPS; ++i) outStream.write("123456789\n", 'ascii');
             outStream.write("JavaScript how do they work\n", 'utf16le');
             outStream.write("The end, almost.\n", 'utf16le');
             outStream.end(TEXTDATA, 'utf16le');
@@ -228,7 +229,7 @@ function startTests(vol, waitTime) {
             outStream.on('finish', function () {
                 outStreamFinished = true;
                 
-                var inStream = fs.createReadStream(file2, {start:10240, encoding:'utf16le', autoClose:false}),
+                var inStream = fs.createReadStream(file2, {start:NUM_REPS*10, encoding:'utf16le', autoClose:false}),
                     gotData = false, gotEOF = false, inStreamFD = null;
                 inStream.on('open', function (fd) {
                     assert(typeof fd === 'number', "Got file descriptor on fs.createReadStream open.");
