@@ -21,8 +21,10 @@ fs.stat("autoexec.bat", function (e,stats) {
 ## API
 
 * `fs = fatfs.createFileSystem(vol)` — Simply pass in a block driver (see below) mapped to a FAT partition somewhere, and get back the API documented [here](http://nodejs.org/api/fs.html)…
+* `'ready'` event — fired on `fs` when . (It is safe to call methods before this
 
-That's it. Well, sort of…
+
+That's it! Well, sort of…
 
 
 ## Caveats

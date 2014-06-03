@@ -1,27 +1,38 @@
-var streams = require('stream'),
+var events = require('events'),
+    streams = require('stream'),
     fifolock = require('fifolock'),
     S = require("./structs.js"),
     _ = require("./helpers.js");
 
-exports.createFileSystem = function (volume, bootSector) {
-    var fs = {},
+exports.createFileSystem = function (volume, opts, cb) {
+    if (typeof opts === 'function') {
+        cb = opts;
+        opts = null;
+    }
+    opts || (opts = {});
+    
+    var fs = new events.EventEmitter(),
         vol = null,
         dir = require("./dir.js"),
         c = require("./chains.js"),
         q = fifolock();
     
     var GROUP = q.TRANSACTION_WRAPPER;
-    
-    if (bootSector) init(bootSector);
-    else volume.readSector(0, function (e,d) {
-        // TODO: emit events like a decent chap… (if this interface is to be documented/public)
-        if (e) throw e;
-        else init(d);       
+    q.acquire(function (unlock) {         // because of this, callers can start before 'ready'
+        volume.readSector(0, function (e,d) {
+            if (e) fs.emit('error', e);
+            else {
+                init(d);
+                fs.emit('ready');
+            }
+            unlock();
+        });
     });
+    
+    if (cb) fs.on('error', cb).on('ready', cb.bind(null, null));
     
     function init(bootSector) {
         vol = require("./vol.js").init(volume, bootSector);
-        bootSector = null;          // allow GC
         fs._dirIterator = dir.iterator.bind(dir);
         
         //fs._entryForPath = dir.entryForPath.bind(dir, vol);

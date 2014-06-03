@@ -1,22 +1,33 @@
-var type = process.argv[2],
-    uniq = Math.random().toString(36).slice(2),
-    IMG = require('os').tmpdir()+"fatfs-test-"+uniq+".img";
-if (!type) throw "Usage: node test [FAT12|FAT16|FAT32|ExFAT|…]";
+// can be called from CLI with image type, absolute path to an image, or, required as a module
 
-if (type[0] === '/') startTests(type);
-else require('child_process').exec("./make_sample.sh "+JSON.stringify(IMG)+" "+JSON.stringify(type), function (e,out,err) {
-    if (e) throw e;
-    console.warn(err.toString());
-    //console.log(out.toString());
-    startTests(IMG);
-    require('fs').unlink(IMG, function (e) {
-        if (e) console.warn("Error cleaning up test image", e);
+var type = process.argv[2];
+if (module.parent) exports.startTests = startTests;
+else if (!type) throw "Usage: node test [FAT12|FAT16|FAT32|ExFAT|…|/path/to/image]";
+else if (type[0] === '/') testWithImage(type);
+else {
+    var uniq = Math.random().toString(36).slice(2),
+        IMG = require('os').tmpdir()+"fatfs-test-"+uniq+".img";
+    require('child_process').exec("./make_sample.sh "+JSON.stringify(IMG)+" "+JSON.stringify(type), function (e,out,err) {
+        if (e) throw e;
+        console.warn(err.toString());
+        //console.log(out.toString());
+        testWithImage(IMG);
+//console.log(IMG);
+//return;
+        require('fs').unlink(IMG, function (e) {
+            if (e) console.warn("Error cleaning up test image", e);
+        });
     });
-});
+}
 
-function startTests(imagePath) {
-    var fatfs = require("./index.js"),
-        vol = require("./img_volume.js").createDriverSync(imagePath),
+function testWithImage(imagePath) {
+    var vol = require("./img_volume.js").createDriverSync(imagePath);
+    startTests(vol);
+}
+
+
+function startTests(vol) {
+    var fatfs = require("./"),
         fs = fatfs.createFileSystem(vol);
     
     [
@@ -34,11 +45,19 @@ function startTests(imagePath) {
         //'watchFile','unwatchFile','watch'
     ].forEach(function (method) { assert(method in fs, "fs."+method+" has implementation."); });
     
-setTimeout(function () {            // HACK: should wait for 'ready' event or something (not implemented)
-
     var BASE_DIR = "/fat_test",
         FILENAME = "Simple File.txt",
         TEXTDATA = "Hello world!";
+    
+    var isReady = false;
+    fs.on('ready', function () {
+        isReady = true;
+    }).on('error', function (e) {
+        assert(false, "Driver should not error when initializing.");
+    });
+    setTimeout(function () {
+        assert(isReady, "Driver fired ready event in timely fashion.");
+    }, 1e3);
     
     fs.readdir("/", function (e,files) {
         assert(!e, "No error reading root directory.");
@@ -246,12 +265,7 @@ if (e) console.error(e.stack);
             }, 2e3);
         }
     });
-
-}, 1e3);
 }
 
 
-
 function assert(b,msg) { if (!b) throw Error("Assertion failure. "+msg); else console.log(msg); }
-
-
