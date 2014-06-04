@@ -434,6 +434,13 @@ exports.createFileSystem = function (volume, opts, cb) {
         }, cb);
     };
     
+    fs.chown = fs.lchown = function (path, uid, gid, cb) {
+        _fdOperation(path, {flag:'\\r+'}, function (fd, cb) {
+            fs.fchown(fd, uid, gid, cb, '_nested_');
+        }, cb);
+    };
+    
+    
     /* STUBS */
     
     fs.link = function (src, dst, cb) {
@@ -467,6 +474,12 @@ exports.createFileSystem = function (volume, opts, cb) {
             cb(null, _.absolutePath(path));
         }, cb);
     };
+    
+    fs.fchown = function (fd, uid, gid, cb, _n_) { cb = GROUP(cb, function () {
+        var _fd = fileDescriptors[fd];
+        if (!_fd || !_fd.flags.write) _.delayedCall(cb, S.err.BADF());
+        else _.delayedCall(cb, S.err.NOSYS());
+    }, (_n_ === '_nested_')); };
     
     
     return fs;

@@ -39,7 +39,7 @@ function startTests(vol, waitTime) {
         'ftruncate','truncate',
         'write','read','readFile','writeFile', 'appendFile',
         
-        //'chown','fchown','lchown',
+        'chown','lchown','fchown',
         'chmod','lchmod', 'fchmod',
         'utimes','futimes',
         'stat','lstat','fstat',
@@ -250,6 +250,10 @@ function startTests(vol, waitTime) {
                 fs.chmod(F, 0422, function (e) {
                     assert(!e, "No error from fs.chmod.");
                 });
+            });
+            
+            fs.chown(F, 99, 256, function (e) {
+                assert(e && e.code === 'NOSYS', "Expected error from fs.fchown.");
             });
         }
         
