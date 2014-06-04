@@ -159,6 +159,7 @@ dir.makeStat = function (vol, entry) {
     stats.isSocket = function () { return false; }
     stats.size = entry.FileSize;
     stats.blksize = vol._sectorsPerCluster*vol._sectorSize;
+    stats.blocks = Math.ceil(stats.size / stats.blksize) || 1;
     
     function extractDate(prefix) {
         var date = entry[prefix+'Date'],
@@ -174,10 +175,8 @@ dir.makeStat = function (vol, entry) {
     stats.mtime = extractDate('Wrt');
     stats.ctime = extractDate('Crt');
     
-    // TODO: more infos!
-    // …
+    // TODO: figure out which mode scheme(s) to support
     stats.mode;
-    stats.blocks;
     
     return stats;
 };

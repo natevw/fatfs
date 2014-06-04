@@ -31,11 +31,14 @@ function startTests(vol, waitTime) {
         fs = fatfs.createFileSystem(vol);
     
 //    fs.stat("/timestamp", function (e,d) {
-//        assert(!e, "No error from fs.stat");
+//        //assert(!e, "No error from fs.stat");
 //console.log(d);
 //    });
 //    fs.open("/timestamp2", 'w', function (e,fd) {
 //        assert(!e, "No error from fs.open");
+//        fs.write(fd, Buffer(354678), 0, 354678, 0, function (e,n,d) {
+//            console.log(e,n,d);
+//        });
 //        fs.fstat(fd, function (e,d) {
 //            assert(!e, "No error from fs.stat2");
 //console.log(d);
