@@ -109,7 +109,7 @@ var _date = _.struct([
         off.bytes += this.size;
         return buf;
     },
-    size: _time.size
+    size: _date.size
 };
 
 
