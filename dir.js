@@ -192,7 +192,7 @@ dir.init = function (vol, dirChain, cb) {
         S.dirEntry.bytesFromValue(_updateEntry({
             Name: {filename:name, extension:"   "},
             Attr: {directory:true}
-        }, {firstCluster:clusterNum}), initialCluster, entriesOffset);
+        }, {firstCluster:clusterNum, _touch:true,ctime:true}), initialCluster, entriesOffset);
     }
     if (!isRootDir) {
         writeEntry(".", dirChain.toJSON().firstCluster);
