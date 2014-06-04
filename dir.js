@@ -151,8 +151,7 @@ dir.makeStat = function (vol, entry) {
     stats.isDirectory = function () {
         return entry.Attr.directory;
     };
-    // TODO: are these all correct? (especially block/char)
-    stats.isBlockDevice = function () { return true; }
+    stats.isBlockDevice = function () { return false; }
     stats.isCharacterDevice = function () { return false; }
     stats.isSymbolicLink = function () { return false; }
     stats.isFIFO = function () { return false; }
