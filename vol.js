@@ -2,7 +2,7 @@ var S = require("./structs.js"),
     c = require("./chains.js"),
     _ = require("./helpers.js");
 
-exports.init = function (volume, bootSector) {
+exports.init = function (volume, opts, bootSector) {
     if (bootSector[510] !== 0x55 || bootSector[511] !== 0xAA) throw Error("Invalid volume signature!");
     
     var isFAT16 = bootSector.readUInt16LE(S.boot16.fields['FATSz16'].offset),
@@ -35,6 +35,8 @@ exports.init = function (volume, bootSector) {
     
     var vol = {};
     
+    vol.opts = opts;
+    
     vol._sectorSize = BS.BytsPerSec;
     vol._sectorsPerCluster = BS.SecPerClus;
     vol._firstSectorOfCluster = function (n) {
@@ -54,7 +56,7 @@ exports.init = function (volume, bootSector) {
 //console.log("_writeSector of", data.length, "bytes to sector", secNum);
         // NOTE: these are internal assertions, public API will get proper `S.err`s
         if (data.length !== volume.sectorSize) throw Error("Buffer does not match sector size");
-        else if (!volume.writeSector) throw Error("Read-only filesystem");
+        else if (!volume.writeSector || opts.ro) throw Error("Read-only filesystem");
         else if (secNum < volume.numSectors) volume.writeSector(secNum, data, cb);
         else throw Error("Invalid sector number!");
     };

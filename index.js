@@ -9,7 +9,15 @@ exports.createFileSystem = function (volume, opts, cb) {
         cb = opts;
         opts = null;
     }
-    opts || (opts = {});
+    opts = _.extend({
+        // c.f. https://www.kernel.org/doc/Documentation/filesystems/vfat.txt
+        ro: ('writeSector' in volume) ? false : true,
+        noatime: true,
+        modmode: 0111,       // or `07000`
+        umask: ('umask' in process) ? process.umask() : 0022,
+        uid: ('getuid' in process) ? process.getuid() : 0,
+        gid: ('getgid' in process) ? process.getgid() : 0
+    }, opts);
     
     var fs = new events.EventEmitter(),
         vol = null,
@@ -32,7 +40,7 @@ exports.createFileSystem = function (volume, opts, cb) {
     if (cb) fs.on('error', cb).on('ready', cb.bind(null, null));
     
     function init(bootSector) {
-        vol = require("./vol.js").init(volume, bootSector);
+        vol = require("./vol.js").init(volume, opts, bootSector);
         fs._dirIterator = dir.iterator.bind(dir);
         
         //fs._entryForPath = dir.entryForPath.bind(dir, vol);
@@ -77,7 +85,7 @@ exports.createFileSystem = function (volume, opts, cb) {
     cb = GROUP(cb, function () {
         var _fd = {flags:null,entry:null,chain:null,pos:0},
             f = _.parseFlags(flags);
-        if (!volume.writeSector && (f.write || f.create || f.truncate)) return _.delayedCall(cb, S.err.ROFS());
+        if (vol.opts.ro && (f.write || f.create || f.truncate)) return _.delayedCall(cb, S.err.ROFS());
         else _fd.flags = f;
         
         fs._sharedEntryForPath(path, function (e,entry,chain) {
@@ -126,7 +134,7 @@ exports.createFileSystem = function (volume, opts, cb) {
         _fd.chain.readFromPosition(_pos, _buf, function (e,bytes,slice) {
             if (_.workaroundTessel380) _buf.copy(buf,off);        // WORKAROUND: https://github.com/tessel/beta/issues/380
             _fd.pos = _pos + bytes;
-            if (e || volume.noatime) finish(e);
+            if (e || vol.opts.noatime) finish(e);
             else fs._updateEntry(_fd.entry, {atime:true}, finish);
             function finish(e) {
                 cb(e,bytes,buf);
