@@ -131,7 +131,6 @@ exports.createFileSystem = function (volume, opts, cb) {
             mode &= S._I._chmoddable;
             if (_fd.entry.Attr.directory) mode |= S._I.FDIR;
             else if (!_fd.entry.Attr.volume_id) mode |= S._I.FREG;
-console.log("MODE", mode.toString(8));
             fs._updateEntry(_fd.entry, {mode:mode}, cb);
         }
     }, (_n_ === '_nested_')); };
