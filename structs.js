@@ -54,17 +54,63 @@ exports.boot32 = _.struct([
     bootInfo
 ]);
 
-var time = _.struct([
-    _.ubit('hour',5),
+
+var _time = _.struct([
+    _.ubit('hours',5),
     _.ubit('minutes',6),
     _.ubit('seconds',5)
-]);
+]), time = {
+    valueFromBytes: function (buf, off) {
+        off || (off = {bytes:0});
+        
+        var _buf = new Buffer([buf[off.bytes+1], buf[off.bytes+0]]),
+            val = _time.valueFromBytes(_buf);
+        val.seconds *= 2;
+        off.bytes += this.size;
+        return val;
+    },
+    bytesFromValue: function (val, buf, off) {
+        val || (val = {hours:0, minutes:0, seconds:0});
+        buf || (buf = new Buffer(this.size));
+        off || (off = {bytes:0});
+        
+        var _sec = val.seconds,
+            _buf = (val.seconds >>>= 1, _time.bytesFromValue(val));
+        val.seconds = _sec;
+        buf[off.bytes+1] = _buf[0];
+        buf[off.bytes+0] = _buf[1];
+        off.bytes += this.size;
+        return buf;
+    },
+    size: _time.size
+};
 
-var date = _.struct([
+var _date = _.struct([
     _.ubit('year',7),
     _.ubit('month',4),
     _.ubit('day',5)
-]);
+]), date = {
+    valueFromBytes: function (buf, off) {
+        off || (off = {bytes:0});
+        
+        var _buf = new Buffer([buf[off.bytes+1], buf[off.bytes+0]]),
+            val = _date.valueFromBytes(_buf);
+        off.bytes += this.size;
+        return val;
+    },
+    bytesFromValue: function (val, buf, off) {
+        val || (val = {year:0, month:0, day:0});
+        buf || (buf = new Buffer(this.size));
+        off || (off = {bytes:0});
+        
+        var _buf = _date.bytesFromValue(val);
+        buf[off.bytes+1] = _buf[0];
+        buf[off.bytes+0] = _buf[1];
+        off.bytes += this.size;
+        return buf;
+    },
+    size: _time.size
+};
 
 
 exports.dirEntry = _.struct([
@@ -85,7 +131,7 @@ exports.dirEntry = _.struct([
     _.uint8('CrtTimeTenth'),
     _.struct('CrtTime', [time]),
     _.struct('CrtDate', [date]),
-    _.struct('LastAccDate', [date]),
+    _.struct('LstAccDate', [date]),
     _.uint16le('FstClusHI'),
     _.struct('WrtTime', [time]),
     _.struct('WrtDate', [date]),

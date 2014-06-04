@@ -121,7 +121,7 @@ function _updateEntry(entry, newStats) {
         if (d === true) d = _now || (_now = new Date());
         entry[prefix+'Date'] = {year:d.getFullYear()-1980, month:d.getMonth()+1, day:d.getDate()};
         if (timeToo) {
-            entry[prefix+'Time'] = {hour:d.getHours(), minute:d.getMinutes(), seconds:d.getSeconds()>>>1};
+            entry[prefix+'Time'] = {hours:d.getHours(), minutes:d.getMinutes(), seconds:d.getSeconds()};
             if (tenthToo) {
                 var msec = (d.getSeconds() % 2)*1000 + d.getMilliseconds();
                 entry[prefix+'TimeTenth'] = Math.floor(msec / 100);
@@ -139,6 +139,48 @@ function _updateEntry(entry, newStats) {
     }
     return entry;
 }
+
+dir.makeStat = function (vol, entry) {
+    var stats = {};     // TODO: return an actual `instanceof fs.Stat` somehow?
+    
+    entry = _.extend({}, entry);        // copy original so we stay fixed
+    
+    stats.isFile = function () {
+        return (!entry.Attr.volume_id && !entry.Attr.directory);
+    };
+    stats.isDirectory = function () {
+        return entry.Attr.directory;
+    };
+    // TODO: are these all correct? (especially block/char)
+    stats.isBlockDevice = function () { return true; }
+    stats.isCharacterDevice = function () { return false; }
+    stats.isSymbolicLink = function () { return false; }
+    stats.isFIFO = function () { return false; }
+    stats.isSocket = function () { return false; }
+    stats.size = entry.FileSize;
+    stats.blksize = vol._sectorsPerCluster*vol._sectorSize;
+    
+    function extractDate(prefix) {
+        var date = entry[prefix+'Date'],
+            time = entry[prefix+'Time'] || {hours:0, minutes:0, seconds:0},
+            sect = entry[prefix+'TimeTenth'] || 0;
+        if (sect > 100) {
+            time.seconds += 1;
+            sect -= 100;
+        }
+        return new Date(date.year+1980, date.month-1, date.day, time.hours, time.minutes, time.seconds, sect*100);
+    }
+    stats.atime = extractDate('LstAcc');
+    stats.mtime = extractDate('Wrt');
+    stats.ctime = extractDate('Crt');
+    
+    // TODO: more infos!
+    // …
+    stats.mode;
+    stats.blocks;
+    
+    return stats;
+};
 
 dir.init = function (vol, dirChain, cb) {
     var isRootDir = ('numSectors' in dirChain.toJSON()),    // HACK: all others would be a clusterChain

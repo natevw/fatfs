@@ -12,7 +12,7 @@ else {
         console.warn(err.toString());
         //console.log(out.toString());
         testWithImage(IMG);
-//console.log(IMG);
+//console.log("open", IMG);
 //return;
         require('fs').unlink(IMG, function (e) {
             if (e) console.warn("Error cleaning up test image", e);
@@ -29,7 +29,20 @@ function testWithImage(imagePath) {
 function startTests(vol, waitTime) {
     var fatfs = require("./"),
         fs = fatfs.createFileSystem(vol);
-        
+    
+//    fs.stat("/timestamp", function (e,d) {
+//        assert(!e, "No error from fs.stat");
+//console.log(d);
+//    });
+//    fs.open("/timestamp2", 'w', function (e,fd) {
+//        assert(!e, "No error from fs.open");
+//        fs.fstat(fd, function (e,d) {
+//            assert(!e, "No error from fs.stat2");
+//console.log(d);
+//        });
+//    });
+//    return;
+    
     waitTime || (waitTime = 1e3);
     
     [

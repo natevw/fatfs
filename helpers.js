@@ -155,38 +155,6 @@ exports.delayedCall = function (fn) {
     });
 };
 
-// TODO: return an actual `instanceof fs.Stat` somehow?
-exports.makeStat = function (vol, dirEntry) {
-    var stats = {};
-    
-    dirEntry = exports.extend({}, dirEntry);        // copy original so we stay fixed
-    
-    stats.isFile = function () {
-        return (!dirEntry.Attr.volume_id && !dirEntry.Attr.directory);
-    };
-    stats.isDirectory = function () {
-        return dirEntry.Attr.directory;
-    };
-    // TODO: are these all correct? (especially block/char)
-    stats.isBlockDevice = function () { return true; }
-    stats.isCharacterDevice = function () { return false; }
-    stats.isSymbolicLink = function () { return false; }
-    stats.isFIFO = function () { return false; }
-    stats.isSocket = function () { return false; }
-    stats.size = dirEntry.FileSize;
-    stats.blksize = vol._sectorsPerCluster*vol._sectorSize;
-    
-    // TODO: more infos!
-    // …
-    stats.mode;
-    stats.blocks;
-    stats.atime;
-    stats.mtime;
-    stats.ctime;
-    return stats;
-};
-
-
 exports.adjustedPos = function (vol, pos, bytes) {
     var _pos = {
         chain: pos.chain,

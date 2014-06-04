@@ -56,6 +56,7 @@ exports.createFileSystem = function (volume, opts, cb) {
         };
         
         fs._updateEntry = dir.updateEntry.bind(dir, vol);
+        fs._makeStat = dir.makeStat.bind(dir, vol);
         fs._addFile = dir.addFile.bind(dir, vol);
         fs._initDir = dir.init.bind(dir, vol);
     }
@@ -105,7 +106,7 @@ exports.createFileSystem = function (volume, opts, cb) {
     fs.fstat = function (fd, cb, _n_) { cb = GROUP(cb, function () {
         var _fd = fileDescriptors[fd];
         if (!_fd) _.delayedCall(cb, S.err.BADF());
-        else _.delayedCall(cb, null, _.makeStat(vol, _fd.entry));
+        else _.delayedCall(cb, null, fs._makeStat(_fd.entry));
     }, (_n_ === '_nested_')); };
     
     fs.read = function (fd, buf, off, len, pos, cb, _n_) { cb = GROUP(cb, function () {
