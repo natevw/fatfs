@@ -105,14 +105,14 @@ exports.createFileSystem = function (volume, opts, cb) {
     
     fs.fstat = function (fd, cb, _n_) { cb = GROUP(cb, function () {
         var _fd = fileDescriptors[fd];
-        if (!_fd) _.delayedCall(cb, S.err.BADF());
+        if (!_fd || !_fd.flags.read) _.delayedCall(cb, S.err.BADF());
         else _.delayedCall(cb, null, fs._makeStat(_fd.entry));
     }, (_n_ === '_nested_')); };
     
-    
     fs.futimes = function (fd, atime, mtime, cb, _n_) { cb = GROUP(cb, function () {
         var _fd = fileDescriptors[fd];
-        if (!_fd) _.delayedCall(cb, S.err.BADF());          // NOTE: ctime would get touched on POSIX; but we map that to create time!
+        if (!_fd || !_fd.flags.write) _.delayedCall(cb, S.err.BADF());
+        // NOTE: ctime would get touched on POSIX; but we map that to create time!
         else fs._updateEntry(_fd.entry, {atime:atime||true,mtime:mtime||true}, cb);
     }, (_n_ === '_nested_')); };
     
@@ -136,7 +136,7 @@ exports.createFileSystem = function (volume, opts, cb) {
     
     fs._readdir = function (fd, cb, _n_)  { cb = GROUP(cb, function () {
         var _fd = fileDescriptors[fd];
-        if (!_fd) _.delayedCall(cb, S.err.BADF());
+        if (!_fd || !_fd.flags.read) _.delayedCall(cb, S.err.BADF());
         else {
             var entryNames = [],
                 getNextEntry = fs._dirIterator(_fd.chain);
@@ -157,7 +157,7 @@ exports.createFileSystem = function (volume, opts, cb) {
     
     fs._mkdir = function (fd, cb, _n_) { cb = GROUP(cb, function () {
         var _fd = fileDescriptors[fd];
-        if (!_fd) _.delayedCall(cb, S.err.BADF());
+        if (!_fd || !_fd.flags.write) _.delayedCall(cb, S.err.BADF());
         else fs._initDir(_fd.chain, cb);
     }, (_n_ === '_nested_')); };
     
