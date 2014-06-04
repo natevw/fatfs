@@ -160,6 +160,7 @@ dir.makeStat = function (vol, entry) {
     stats.size = entry.FileSize;
     stats.blksize = vol._sectorsPerCluster*vol._sectorSize;
     stats.blocks = Math.ceil(stats.size / stats.blksize) || 1;
+    stats.nlink = 1;
     
     function extractDate(prefix) {
         var date = entry[prefix+'Date'],
