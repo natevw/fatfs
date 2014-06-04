@@ -28,7 +28,7 @@ function testWithImage(imagePath) {
 
 function startTests(vol, waitTime) {
     var fatfs = require("./"),
-        fs = fatfs.createFileSystem(vol);
+        fs = fatfs.createFileSystem(vol, {umask:0020, uid:99, gid:42});
     
     waitTime || (waitTime = 1e3);
     
@@ -40,7 +40,7 @@ function startTests(vol, waitTime) {
         'write','read','readFile','writeFile', 'appendFile',
         
         //'chown','fchown','lchown',
-        //'chmod','fchmod','lchmod',
+        'chmod','lchmod', 'fchmod',
         'utimes','futimes',
         'stat','lstat','fstat',
         'link','symlink','readlink','realpath',
@@ -234,7 +234,21 @@ function startTests(vol, waitTime) {
                         var tf = d2.mtime.getTime(),
                             ct = Date.now();
                         assert(tf - 2*waitTime < ct && ct < tf + 2*waitTime, "Modify time is within ± two `waitTime`s of now.");
+                        
+                        // NOTE: due to serialization, this can check results of the `fs.chmod` below, too!
+                        assert(!(d2.mode & 0100), "Archive bit is now unset.");
+                        assert(!(d2.mode & 0222), "Writable perms are unset.");
+                        assert(d2.mode & 0100000, "Regular file bit is set.");
                     });
+                });
+                
+                assert(d.uid === 99, "Desired UID applied.");
+                assert(d.gid === 42, "Desired GID applied.");
+                assert(d.mode & 0100, "Archive bit is set.");
+                assert(d.mode & 0200, "Writable perm is set for user.");
+                assert((d.mode & 0022) === 0002, "Writable perm is only masked out for group.");
+                fs.chmod(F, 0422, function (e) {
+                    assert(!e, "No error from fs.chmod.");
                 });
             });
         }

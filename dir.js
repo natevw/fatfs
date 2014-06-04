@@ -110,7 +110,7 @@ dir.iterator = function (dirChain, opts) {
     return iter;
 };
 
-function _updateEntry(entry, newStats) {
+function _updateEntry(vol, entry, newStats) {
     if ('size' in newStats) entry._size = entry.FileSize = newStats.size;
     
     if ('_touch' in newStats) newStats.archive = newStats.atime = newStats.mtime = true;
@@ -131,6 +131,26 @@ function _updateEntry(entry, newStats) {
     if ('ctime' in newStats) applyDate(newStats.ctime, 'Crt', true, true);
     if ('mtime' in newStats) applyDate(newStats.mtime, 'Wrt', true);
     if ('atime' in newStats) applyDate(newStats.atime, 'LstAcc');
+    
+    if ('mode' in newStats) {
+        entry.Attr.directory = (newStats.mode & S._I.FDIR) ? true : false;
+        entry.Attr.volume_id = (newStats.mode & S._I.FREG) ? false : true;
+        if (vol.opts.modmode === 0111) {
+            entry.Attr.archive = (newStats.mode & S._I.XUSR) ? true : false;
+            entry.Attr.system  = (newStats.mode & S._I.XGRP) ? true : false;
+            entry.Attr.hidden  = (newStats.mode & S._I.XOTH) ? true : false;
+            entry.Attr.readonly = (newStats.mode & S._I.WUSR) ? false : true;
+        } else if (vol.opts.modmode === 07000) {
+            entry.Attr.archive = (newStats.mode & S._I.SVTX) ? true : false;
+            entry.Attr.system  = (newStats.mode & S._I.SGID) ? true : false;
+            entry.Attr.hidden  = (newStats.mode & S._I.SUID) ? true : false;
+            entry.Attr.readonly = (
+                newStats.mode & S._I.WUSR ||
+                newStats.mode & S._I.WGRP ||
+                newStats.mode & S._I.WOTH
+            ) ? false : true;
+        }
+    }
     
     if ('firstCluster' in newStats) {
         entry.FstClusLO = newStats.firstCluster & 0xFFFF;
@@ -161,6 +181,27 @@ dir.makeStat = function (vol, entry) {
     stats.blocks = Math.ceil(stats.size / stats.blksize) || 1;
     stats.nlink = 1;
     
+    stats.mode = S._I.RUSR | S._I.RGRP | S._I.ROTH;
+    if (!entry.Attr.readonly) stats.mode |= S._I.WUSR | S._I.WGRP | S._I.WOTH;
+    if (entry.Attr.directory) stats.mode |= S._I.FDIR;
+    else if (!entry.Attr.volume_id) stats.mode |= S._I.FREG;
+    // NOTE: discussion at https://github.com/natevw/fatfs/issues/7
+    if (vol.opts.modmode === 0111) {
+        // expose using executable bits, like Samba
+        if (entry.Attr.archive) stats.mode |= S._I.XUSR;
+        if (entry.Attr.system)  stats.mode |= S._I.XGRP;
+        if (entry.Attr.hidden)  stats.mode |= S._I.XOTH;
+    } else if (vol.opts.modmode === 07000) {
+        // expose using setXid/sticky bits, like MKS
+        if (entry.Attr.archive) stats.mode |= S._I.SVTX;
+        if (entry.Attr.system)  stats.mode |= S._I.SGID;
+        if (entry.Attr.hidden)  stats.mode |= S._I.SUID;
+    }
+    
+    stats.mode &= ~vol.opts.umask;
+    stats.uid =  vol.opts.uid;
+    stats.gid = vol.opts.gid;
+    
     function extractDate(prefix) {
         var date = entry[prefix+'Date'],
             time = entry[prefix+'Time'] || {hours:0, minutes:0, seconds:0},
@@ -188,7 +229,7 @@ dir.init = function (vol, dirChain, cb) {
     initialCluster.fill(0);
     function writeEntry(name, clusterNum) {
         while (name.length < 8) name += " ";
-        S.dirEntry.bytesFromValue(_updateEntry({
+        S.dirEntry.bytesFromValue(_updateEntry(vol, {
             Name: {filename:name, extension:"   "},
             Attr: {directory:true}
         }, {firstCluster:clusterNum, _touch:true,ctime:true}), initialCluster, entriesOffset);
@@ -290,7 +331,7 @@ dir.addFile = function (vol, dirChain, name, opts, cb) {
             var nameBuf = S.dirEntry.fields['Name'].bytesFromValue(mainEntry.Name),
                 nameSum = _.checksumName(nameBuf);
             // TODO: finalize initial properties… (via `opts.mode` instead?)
-            _updateEntry(mainEntry, {firstCluster:fileCluster, size:0, ctime:true,_touch:true});
+            _updateEntry(vol, mainEntry, {firstCluster:fileCluster, size:0, ctime:true,_touch:true});
             mainEntry._pos = _.adjustedPos(vol, d.target, S.dirEntry.size*(entries.length-1));
             entries.slice(1).forEach(function (entry) {
                 entry.Chksum = nameSum;
@@ -357,7 +398,7 @@ dir.updateEntry = function (vol, entry, newStats, cb) {
     
     var entryPos = entry._pos,
         chain = vol.chainFromJSON(entryPos.chain),          // TODO: fix
-        newEntry = _updateEntry(entry, newStats),
+        newEntry = _updateEntry(vol, entry, newStats),
         data = S.dirEntry.bytesFromValue(newEntry);
 //console.log("UPDATING ENTRY", newStats, newEntry, entryPos, data);
     // TODO: if write fails, then entry becomes corrupt!

@@ -124,6 +124,18 @@ exports.createFileSystem = function (volume, opts, cb) {
         else fs._updateEntry(_fd.entry, {atime:atime||true,mtime:mtime||true}, cb);
     }, (_n_ === '_nested_')); };
     
+    fs.fchmod = function (fd, mode, cb, _n_) { cb = GROUP(cb, function () {
+        var _fd = fileDescriptors[fd];
+        if (!_fd || !_fd.flags.write) _.delayedCall(cb, S.err.BADF());
+        else {
+            mode &= S._I._chmoddable;
+            if (_fd.entry.Attr.directory) mode |= S._I.FDIR;
+            else if (!_fd.entry.Attr.volume_id) mode |= S._I.FREG;
+console.log("MODE", mode.toString(8));
+            fs._updateEntry(_fd.entry, {mode:mode}, cb);
+        }
+    }, (_n_ === '_nested_')); };
+    
     fs.read = function (fd, buf, off, len, pos, cb, _n_) { cb = GROUP(cb, function () {
         var _fd = fileDescriptors[fd];
         if (!_fd || !_fd.flags.read) _.delayedCall(cb, S.err.BADF());
@@ -417,6 +429,11 @@ exports.createFileSystem = function (volume, opts, cb) {
         }, cb);
     };
     
+    fs.chmod = fs.lchmod = function (path, mode, cb) {
+        _fdOperation(path, {flag:'\\r+'}, function (fd, cb) {
+            fs.fchmod(fd, mode, cb, '_nested_');
+        }, cb);
+    };
     
     /* STUBS */
     

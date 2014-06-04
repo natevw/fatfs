@@ -183,6 +183,32 @@ exports.fatStat = {
     eof: 0xFF
 };
 
+exports._I = {
+    RUSR: 0400,
+    WUSR: 0200,
+    XUSR: 0100,
+    
+    RGRP: 0040,
+    WGRP: 0020,
+    XGRP: 0010,
+    
+    ROTH: 0004,
+    WOTH: 0002,
+    XOTH: 0001,
+    
+    SUID: 04000,
+    SGID: 02000,
+    SVTX: 01000,
+    
+    FDIR: 040000,
+    FREG: 0100000,
+};
+
+exports._I.RWXU = exports._I.RUSR | exports._I.WUSR | exports._I.XUSR;
+exports._I.RWXG = exports._I.RGRP | exports._I.WGRP | exports._I.XGRP;
+exports._I.RWXO = exports._I.ROTH | exports._I.WOTH | exports._I.XOTH;
+exports._I._sss = exports._I.SUID | exports._I.SGID | exports._I.SVTX;
+exports._I._chmoddable = exports._I.RWXU | exports._I.RWXG | exports._I.RWXO | exports._I._sss;
 
 var _errors = {
     IO: "Input/output error",
