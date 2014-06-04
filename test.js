@@ -30,22 +30,6 @@ function startTests(vol, waitTime) {
     var fatfs = require("./"),
         fs = fatfs.createFileSystem(vol);
     
-//    fs.stat("/timestamp", function (e,d) {
-//        //assert(!e, "No error from fs.stat");
-//console.log(d);
-//    });
-//    fs.open("/timestamp2", 'w', function (e,fd) {
-//        assert(!e, "No error from fs.open");
-//        fs.write(fd, Buffer(354678), 0, 354678, 0, function (e,n,d) {
-//            console.log(e,n,d);
-//        });
-//        fs.fstat(fd, function (e,d) {
-//            assert(!e, "No error from fs.stat2");
-//console.log(d);
-//        });
-//    });
-//    return;
-    
     waitTime || (waitTime = 1e3);
     
     [
@@ -55,8 +39,9 @@ function startTests(vol, waitTime) {
         'ftruncate','truncate',
         'write','read','readFile','writeFile', 'appendFile',
         
-        //'chown','fchown','lchown','chmod','fchmod','lchmod',
-        //'utimes','futimes',
+        //'chown','fchown','lchown',
+        //'chmod','fchmod','lchmod',
+        'utimes','futimes',
         'stat','lstat','fstat',
         'link','symlink','readlink','realpath',
         
@@ -162,7 +147,6 @@ function startTests(vol, waitTime) {
                                         });
                                     }); 
                                 });
-                                
                             });
                         });
                     });
@@ -230,6 +214,27 @@ function startTests(vol, waitTime) {
                     var matched = true;
                     for (var i = 0; i < S*N; ++i) if (b[i] !== d[i]) matched = false;
                     assert(matched, "Readback matches write byte-for-byte");
+                });
+            });
+            
+            fs.stat(F, function (e,d) {
+                assert(!e, "No error from fs.stat on counting blocks file.");
+                assert(d.atime instanceof Date && !isNaN(d.atime.getTime()), "Access time is a valid date.");
+                assert(d.mtime instanceof Date && !isNaN(d.mtime.getTime()), "Modify time is a valid date.");
+                assert(d.ctime instanceof Date && !isNaN(d.ctime.getTime()), "Change^WCreate time is a valid date.");
+                var tf = d.ctime.getTime(),
+                    ct = Date.now();
+                assert(tf - 2*waitTime < ct && ct < tf + 2*waitTime, "Create time is within ± two `waitTime`s of now.");
+                fs.utimes(F, new Date(2009, 7-1, 2), null, function (e) {
+                    assert(!e, "No error from fs.utimes.");
+                    fs.stat(F, function (e,d2) {
+                        assert(!e, "No fs.stat error after touching timestamps.");
+                        assert(+d.ctime === +d2.ctime, "Create time not changed by fs.utimes");
+                        assert(d2.atime.toString().indexOf("Jul 02 2009 00:00:00") === 4, "Access time set correctly");
+                        var tf = d2.mtime.getTime(),
+                            ct = Date.now();
+                        assert(tf - 2*waitTime < ct && ct < tf + 2*waitTime, "Modify time is within ± two `waitTime`s of now.");
+                    });
                 });
             });
         }
