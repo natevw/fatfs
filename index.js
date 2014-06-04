@@ -18,6 +18,7 @@ exports.createFileSystem = function (volume, opts, cb) {
         uid: ('getuid' in process) ? process.getuid() : 0,
         gid: ('getgid' in process) ? process.getgid() : 0
     }, opts);
+    if (opts.ro) opts.noatime = true;       // natch
     
     var fs = new events.EventEmitter(),
         vol = null,
