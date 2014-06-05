@@ -43,14 +43,14 @@ exports.init = function (volume, opts, bootSector) {
         return firstDataSector + (n-2)*vol._sectorsPerCluster;
     };
     
-    vol._readSector = function (secNum, n, cb) {
-        if (typeof n === 'function') {
-            cb = n;
-            n = 1;
+    vol._readSector = function (secNum, dest, cb) {
+        if (typeof dest === 'function') {
+            cb = dest;
+            dest = new Buffer(vol._sectorSize);
         }
-//console.log("_readSector", secNum, n);
-//console.log("_readSector", secNum, n, Error().stack);
-        if (secNum < volume.numSectors) volume.readSectors(secNum, new Buffer(vol._sectorSize), cb);
+//console.log("_readSector", secNum, dest.length);
+//console.log("_readSector", secNum, dest.length, Error().stack);
+        if (secNum < volume.numSectors) volume.readSectors(secNum, dest, function (e) { cb(e, dest); });
         else throw Error("Invalid sector number!");
     };
     
