@@ -30,7 +30,7 @@ function startTests(vol, waitTime) {
     var fatfs = require("./"),
         fs = fatfs.createFileSystem(vol, {umask:0020, uid:99, gid:42});
     
-    waitTime || (waitTime = 1e3);
+    waitTime || (waitTime = 0.5e3);
     
     [
         'mkdir','readdir',
@@ -233,7 +233,7 @@ function startTests(vol, waitTime) {
                         assert(d2.atime.toString().indexOf("Jul 02 2009 00:00:00") === 4, "Access time set correctly");
                         var tf = d2.mtime.getTime(),
                             ct = Date.now();
-                        assert(tf - 2*waitTime < ct && ct < tf + 2*waitTime, "Modify time is within ± two `waitTime`s of now.");
+                        assert(tf-2e3 < ct && ct < tf+2e3+waitTime, "Modify time is within ± a few seconds of now.");
                         
                         // NOTE: due to serialization, this can check results of the `fs.chmod` below, too!
                         assert(!(d2.mode & 0100), "Archive bit is now unset.");
