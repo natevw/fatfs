@@ -1,5 +1,6 @@
 var S = require("./structs.js"),
     c = require("./chains.js"),
+    $ = require("./cache.js"),
     _ = require("./helpers.js");
 
 exports.init = function (volume, opts, bootSector) {
@@ -42,6 +43,8 @@ exports.init = function (volume, opts, bootSector) {
     vol._firstSectorOfCluster = function (n) {
         return firstDataSector + (n-2)*vol._sectorsPerCluster;
     };
+    
+    volume = $.wrapDriver(volume);
     
     vol._readSector = function (secNum, dest, cb) {
         if (typeof dest === 'function') {
