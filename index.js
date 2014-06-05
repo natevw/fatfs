@@ -11,13 +11,14 @@ exports.createFileSystem = function (volume, opts, cb) {
     }
     opts = _.extend({
         // c.f. https://www.kernel.org/doc/Documentation/filesystems/vfat.txt
-        ro: ('writeSector' in volume) ? false : true,
+        ro: false,
         noatime: true,
         modmode: 0111,       // or `07000`
         umask: ('umask' in process) ? process.umask() : 0022,
         uid: ('getuid' in process) ? process.getuid() : 0,
         gid: ('getgid' in process) ? process.getgid() : 0
     }, opts);
+    if (!volume.writeSectors) opts.ro = true;
     if (opts.ro) opts.noatime = true;       // natch
     
     var fs = new events.EventEmitter(),
@@ -28,7 +29,7 @@ exports.createFileSystem = function (volume, opts, cb) {
     
     var GROUP = q.TRANSACTION_WRAPPER;
     q.acquire(function (unlock) {         // because of this, callers can start before 'ready'
-        volume.readSector(0, function (e,d) {
+        volume.readSectors(0, new Buffer(volume.sectorSize), function (e,d) {
             if (e) fs.emit('error', e);
             else {
                 init(d);

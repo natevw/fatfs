@@ -11,13 +11,13 @@ exports.createDriverSync = function (path, opts) {
     return {
         sectorSize: secSize,
         numSectors: s.size / secSize,
-        readSector: function (n, cb) {
-            fs.read(fd, Buffer(secSize), 0, secSize, n*secSize, function (e,n,d) {
+        readSectors: function (i, dest, cb) {
+            fs.read(fd, dest, 0, dest.length, i*secSize, function (e,n,d) {
                 cb(e,d);
             });
         },
-        writeSector: (ro) ? null : function (n, data, cb) {
-            fs.write(fd, data, 0, secSize, n*secSize, function (e) {
+        writeSectors: (ro) ? null : function (i, data, cb) {
+            fs.write(fd, data, 0, data.length, i*secSize, function (e) {
                 cb(e);
             });
         }

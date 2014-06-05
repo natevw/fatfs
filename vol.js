@@ -43,10 +43,14 @@ exports.init = function (volume, opts, bootSector) {
         return firstDataSector + (n-2)*vol._sectorsPerCluster;
     };
     
-    vol._readSector = function (secNum, cb) {
-//console.log("_readSector", secNum);
-//console.log("_readSector", secNum, Error().stack);
-        if (secNum < volume.numSectors) volume.readSector(secNum, cb);
+    vol._readSector = function (secNum, n, cb) {
+        if (typeof n === 'function') {
+            cb = n;
+            n = 1;
+        }
+//console.log("_readSector", secNum, n);
+//console.log("_readSector", secNum, n, Error().stack);
+        if (secNum < volume.numSectors) volume.readSectors(secNum, new Buffer(vol._sectorSize), cb);
         else throw Error("Invalid sector number!");
     };
     
@@ -56,8 +60,8 @@ exports.init = function (volume, opts, bootSector) {
 //console.log("_writeSector of", data.length, "bytes to sector", secNum);
         // NOTE: these are internal assertions, public API will get proper `S.err`s
         if (data.length !== volume.sectorSize) throw Error("Buffer does not match sector size");
-        else if (!volume.writeSector || opts.ro) throw Error("Read-only filesystem");
-        else if (secNum < volume.numSectors) volume.writeSector(secNum, data, cb);
+        else if (opts.ro) throw Error("Read-only filesystem");
+        else if (secNum < volume.numSectors) volume.writeSectors(secNum, data, cb);
         else throw Error("Invalid sector number!");
     };
     

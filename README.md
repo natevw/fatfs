@@ -28,7 +28,7 @@ fs.stat("autoexec.bat", function (e,stats) {
 
 The `opts` dictionary you pass to `fatfs.createFileSystem` can contain any of the following options:
 
-* `ro` — Enables readonly mode if `true`. It defaults to `false`, unless your volume driver does not provide a `writeSector` method.
+* `ro` — Enables readonly mode if `true`. It defaults to `false`, but if your volume driver does not provide a `writeSectors` method it will be overriden to `true`.
 * `noatime` — The FAT filesystem can track the last access time (just a date, actually) but this means every read operation would also incur some write overhead. Defaults to `true`, meaning by default access times will **not** be updated on reads. Set this to `false` to track access times.
 * `modmode` — chooses how `fs.chmod` (and the mode field from `fs.stat`–family calls) should map FAT attributes to POSIX permissions. Set to the number `0111` to map the readonly flag to the user's write bit being unset, and the archive/system/hidden flags to the user/group/other executable bits respectively. Set to the number `07000` to map the readonly flag to *all* write bits being unset, and the archive/system/hidden flags to the sticky/setgid/setuid bits respectively. Set to `null` for readonly mapping. Defaults to `0111`.
 * `umask` — any bits *set* in this octal number will be *unset* in the 'mode' field from `fs.stat`–family calls. It does not affect anything else. Defaults to `process.umask()`, or `0022` if that is unavailable.
@@ -66,10 +66,10 @@ To use 'fatfs', you must provide a driver object with the following properties/m
 
 * `driver.sectorSize` — number of bytes per sector on this device
 * `driver.numSectors` — count of sectors available on this media
-* `driver.readSector(n, cb)` — returns the requested block to `cb(e, data)`
-* `driver.writeSector(n, data, cb)` — (optional) writes the data and notifies `cb(e)`
+* `driver.readSectors(i, dest, cb)` — Fill `dest` with data starting at the `i`th sector and notify `cb(e)` when finished. You may assume `dest.length` is a multiple of `driver.sectorSize`.
+* `driver.writeSectors(i, data, cb)` — (optional) Write `data` starting at the `i`th sector and notify `cb(e)` when finished. You may assume `data.length` is a multiple of `driver.sectorSize`.
 
-If you do not provide a `writeSector` method, then `fatfs` will work in readonly mode. Pretty simple, eh? And the 'fatfs' module makes a good effort to check the parameters passed to your driver methods!
+If you do not provide a `writeSectors` method, then `fatfs` will work in readonly mode. Pretty simple, eh? And the 'fatfs' module makes a good effort to check the parameters passed to your driver methods!
 
 **TBD:** to facilitate proper cache handling, this module might add an optional `driver.flush(cb)` method at some point in the future.
 
@@ -91,13 +91,15 @@ exports.createDriverSync = function (path, opts) {
     return {
         sectorSize: secSize,
         numSectors: s.size / secSize,
-        readSector: function (n, cb) {
-            fs.read(fd, Buffer(secSize), 0, secSize, n*secSize, function (e,n,d) {
+        readSectors: function (i, dest, cb) {
+            if (dest.length % secSize) throw Error("Unexpected buffer length!");
+            fs.read(fd, dest, 0, dest.length, i*secSize, function (e,n,d) {
                 cb(e,d);
             });
         },
-        writeSector: (ro) ? null : function (n, data, cb) {
-            fs.write(fd, data, 0, secSize, n*secSize, function (e) {
+        writeSectors: (ro) ? null : function (i, data, cb) {
+            if (data.length % secSize) throw Error("Unexpected buffer length!");
+            fs.write(fd, data, 0, data.length, i*secSize, function (e) {
                 cb(e);
             });
         }
