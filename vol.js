@@ -59,7 +59,7 @@ exports.init = function (volume, opts, bootSector) {
 //console.log("_writeSector", secNum, Error().stack);
 //console.log("_writeSector of", data.length, "bytes to sector", secNum);
         // NOTE: these are internal assertions, public API will get proper `S.err`s
-        if (data.length !== volume.sectorSize) throw Error("Buffer does not match sector size");
+        if (data.length % volume.sectorSize) throw Error("Buffer length not a multiple of sector size");
         else if (opts.ro) throw Error("Read-only filesystem");
         else if (secNum < volume.numSectors) volume.writeSectors(secNum, data, cb);
         else throw Error("Invalid sector number!");
