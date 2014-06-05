@@ -95,16 +95,11 @@ exports.clusterChain = function (vol, firstCluster, _parent) {
     }
     
     function fillCluster(c, val, cb) {
-        var buf = new Buffer(chain.sectorSize);
+        var buf = new Buffer(chain.sectorSize*vol._sectorsPerCluster);
         buf.fill(val);
-        function fillSectors(s, rem) {
-            if (!rem) cb();
-            else vol._writeSector(s, buf, function (e) {
-                if (e) cb(e);
-                else fillSectors(s+1, rem-1);
-            });
-        }
-        fillSectors(vol._firstSectorOfCluster(c), vol._sectorsPerCluster);
+        // ~HACK: bypass chain and go straight to vol's bulk-write method
+        // TODO: update `chain.writeToPosition` to do this so more can benefit…
+        vol._writeSector(vol._firstSectorOfCluster(c), buf, cb);
     }
     
     function expandChainToLength(clusterCount, cb) {
@@ -142,7 +137,7 @@ exports.clusterChain = function (vol, firstCluster, _parent) {
         }
         if (clusterCount) removeClusters(cache.length - clusterCount, cb);
         else removeClusters(cache.length - 1, function (e) {
-            // we never remove the firstCluster ourselve; clear it instead…
+            // we never remove the firstCluster ourselves; clear it instead…
             if (e) cb(e);
             else fillCluster(cache[0], 0, cb);
         });
