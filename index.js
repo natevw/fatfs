@@ -29,7 +29,8 @@ exports.createFileSystem = function (volume, opts, cb) {
     
     var GROUP = q.TRANSACTION_WRAPPER;
     q.acquire(function (unlock) {         // because of this, callers can start before 'ready'
-        volume.readSectors(0, new Buffer(volume.sectorSize), function (e,d) {
+        var d = new Buffer(volume.sectorSize);
+        volume.readSectors(0, d, function (e) {
             if (e) fs.emit('error', e);
             else {
                 init(d);
