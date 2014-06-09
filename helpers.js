@@ -1,4 +1,5 @@
-var S = require("./structs.js");
+var S = require("./structs.js"),
+    _xok = require('xok');
 
 // flag for WORKAROUND: https://github.com/tessel/beta/issues/380
 exports.workaroundTessel380 = function () {
@@ -168,14 +169,7 @@ exports.adjustedPos = function (vol, pos, bytes) {
     return _pos;
 };
 
-exports.extend = function (obj) {
-    Array.prototype.slice.call(arguments, 1).forEach(function (ext) {
-        if (ext) Object.keys(ext).forEach(function (key) {
-            obj[key] = ext[key];
-        });
-    });
-    return obj;
-};
+exports.extend = _xok;
 
 var _prevDbg = Date.now(),
     _thresh = 50;
