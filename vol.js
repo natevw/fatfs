@@ -9,7 +9,7 @@ exports.init = function (volume, opts, bootSector) {
     var isFAT16 = bootSector.readUInt16LE(S.boot16.fields['FATSz16'].offset),
         bootStruct = (isFAT16) ? S.boot16 : S.boot32,
         BS = bootStruct.valueFromBytes(bootSector);
-//console.log(BS);
+    _.log(_.log.DBG, "Boot sector info:", BS);
     bootSector = null;      // allow GC
     if (!BS.BytsPerSec) throw Error("This looks like an ExFAT volume! (unsupported)");
     else if (BS.BytsPerSec !== volume.sectorSize) throw Error("Sector size mismatch with FAT table.");
@@ -32,7 +32,7 @@ exports.init = function (volume, opts, bootSector) {
         fatType = 'fat32';
     }
     
-//console.log("rootDirSectors", rootDirSectors, "firstDataSector", firstDataSector, "countofClusters", countofClusters, "=>", fatType);
+    _.log(_.log.DBG, "rootDirSectors", rootDirSectors, "firstDataSector", firstDataSector, "countofClusters", countofClusters, "=>", fatType);
     
     var vol = {};
     
@@ -51,16 +51,13 @@ exports.init = function (volume, opts, bootSector) {
             cb = dest;
             dest = new Buffer(vol._sectorSize);
         }
-//console.log("_readSector", secNum, dest.length);
-//console.log("_readSector", secNum, dest.length, Error().stack);
+        _.log(_.log.DBG, "vol._readSector", secNum, dest.length);
         if (secNum < volume.numSectors) volume.readSectors(secNum, dest, function (e) { cb(e, dest); });
         else throw Error("Invalid sector number!");
     };
     
     vol._writeSector = function (secNum, data, cb) {
-//console.log("_writeSector", secNum);
-//console.log("_writeSector", secNum, Error().stack);
-//console.log("_writeSector of", data.length, "bytes to sector", secNum);
+        _.log(_.log.DBG, "vol._writeSector", secNum, data.length);
         // NOTE: these are internal assertions, public API will get proper `S.err`s
         if (data.length % volume.sectorSize) throw Error("Buffer length not a multiple of sector size");
         else if (opts.ro) throw Error("Read-only filesystem");

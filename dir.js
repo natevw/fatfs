@@ -48,7 +48,7 @@ dir.iterator = function (dirChain, opts) {
                 entryType = (attrByte === S.longDirFlag) ? S.longDirEntry : S.dirEntry;
             var entry = entryType.valueFromBytes(buf, off);
             entry._pos = entryPos;
-//console.log("entry:", entry, secIdx, entryIdx);
+            _.log(_.log.DBG, "entry:", entry, secIdx, entryIdx);
             if (entryType === S.longDirEntry) {
                 var firstEntry;
                 if (entry.Ord & S.lastLongFlag) {
@@ -322,7 +322,7 @@ dir.addFile = function (vol, dirChain, name, opts, cb) {
                 sufIdx = (~endIdx) ? Math.min(endIdx, name.length-suffix.length) : name.length-suffix.length;
             if (sufIdx < 0) return cb(S.err.NAMETOOLONG());         // TODO: would EXIST be more correct?
             mainEntry.Name.filename = name.slice(0,sufIdx)+suffix+name.slice(sufIdx+suffix.length);
-//console.log("Shortname amended to:", mainEntry.Name);
+            _.log(_.log.DBG, "Shortname amended to:", mainEntry.Name);
         }
         
         vol.allocateInFAT(dirChain.toJSON().firstCluster || 2, function (e,fileCluster) {
@@ -346,7 +346,7 @@ dir.addFile = function (vol, dirChain, name, opts, cb) {
                 entryType.bytesFromValue(entry, entriesData, dataOffset);
             });
             
-//console.log("Writing", entriesData.length, "byte directory entry", mainEntry, "into", dirChain.toJSON(), "at", d.target);
+            _.log(_.log.DBG, "Writing", entriesData.length, "byte directory entry", mainEntry, "into", dirChain.toJSON(), "at", d.target);
             dirChain.writeToPosition(d.target, entriesData, function (e) {
                 // TODO: if we get error, what/should we clean up?
                 if (e) cb(e);
@@ -373,7 +373,7 @@ dir.entryForPath = function (vol, path, cb) {
     var spets = _.absoluteSteps(path).reverse();
     function findNext(chain) {
         var name = spets.pop();
-//console.log("Looking in", chain, "for:", name);
+        _.log(_.log.DBG, "Looking in", chain.toJSON(), "for", JSON.stringify(name));
         if (!name) cb(null, {
             // TODO: *real* fake entry for root directory
             Attr: {directory:true}, FileSize: 0
@@ -400,7 +400,7 @@ dir.updateEntry = function (vol, entry, newStats, cb) {
         chain = vol.chainFromJSON(entryPos.chain),          // TODO: fix
         newEntry = _updateEntry(vol, entry, newStats),
         data = S.dirEntry.bytesFromValue(newEntry);
-//console.log("UPDATING ENTRY", newStats, newEntry, entryPos, data);
+    _.log(_.log.DBG, "UPDATING ENTRY", newStats, newEntry, entryPos, data);
     // TODO: if write fails, then entry becomes corrupt!
     chain.writeToPosition(entryPos, data, cb);
 };

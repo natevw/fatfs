@@ -32,7 +32,7 @@ function _baseChain(vol) {
     };
     
     chain.writeToPosition = function (targetPos, data, cb) {
-//console.log("WRITING", data.length, "bytes at", targetPos, "in", this.toJSON(), data);
+        _.log(_.log.DBG, "WRITING", data.length, "bytes at", targetPos, "in", this.toJSON(), data);
         if (typeof targetPos === 'number') targetPos = posFromOffset(targetPos);
         function _writeToChain(sec, off, data) {
             var incomplete = (off || data.length < chain.sectorSize);

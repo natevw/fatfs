@@ -176,3 +176,24 @@ exports.extend = function (obj) {
     });
     return obj;
 };
+
+var _prevDbg = Date.now(),
+    _thresh = 50;
+
+function log(level) {
+    if (level < log.level) return;
+    
+    var now = Date.now(),
+        diff = now - _prevDbg;
+    arguments[0] = ((diff < _thresh) ? " " : '') + diff.toFixed(0)  + "ms";
+    console.log.apply(console, arguments);
+    _prevDbg = now;
+}
+log.DBG = -4;
+log.INFO = -3;
+log.WARN = -2;
+log.ERR = -1;
+
+log.level = log.WARN;
+
+exports.log = log;

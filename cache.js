@@ -26,7 +26,7 @@ exports.wrapDriver = function (volume, opts) {
         Object.keys(cache).sort().slice(opts.maxSectors).forEach(function (x) {
             delete cache[x];
         });
-        //console.log("Cache now contains:", Object.keys(cache).join(','));
+        _.log(_.log.DBG, "Cache now contains:", Object.keys(cache).join(','));
     }
     
     return {

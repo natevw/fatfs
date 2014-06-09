@@ -4,6 +4,8 @@ var events = require('events'),
     S = require("./structs.js"),
     _ = require("./helpers.js");
 
+//_.log.level = _.log.DBG;
+
 exports.createFileSystem = function (volume, opts, cb) {
     if (typeof opts === 'function') {
         cb = opts;
@@ -27,7 +29,17 @@ exports.createFileSystem = function (volume, opts, cb) {
         c = require("./chains.js"),
         q = fifolock();
     
-    var GROUP = q.TRANSACTION_WRAPPER;
+    var GROUP = (_.log.level < _.log.INFO) ? q.TRANSACTION_WRAPPER.bind({
+        postAcquire: function (proceed) {
+            _.log(_.log.DBG, "=== Starting GROUP ===");
+            proceed();
+        },
+        preRelease: function (finish) {
+            _.log(_.log.DBG, "=== Finishing GROUP ===");
+            finish();
+        }
+    }) : q.TRANSACTION_WRAPPER;
+    
     q.acquire(function (unlock) {         // because of this, callers can start before 'ready'
         var d = new Buffer(volume.sectorSize);
         volume.readSectors(0, d, function (e) {
@@ -53,10 +65,12 @@ exports.createFileSystem = function (volume, opts, cb) {
             entriesByPath[k] = {e:entry, c:chain, s:1};
         };
         fs._sharedEntryForPath = function (path, cb) {
+//var start = Date.now();
             var k = _.absolutePath(path);
             if (k in entriesByPath) entriesByPath[k].s += 1, _.delayedCall(cb, null, entriesByPath[k].e, entriesByPath[k].c);
             else dir.entryForPath(vol, path, function (e, entry, chain) {
                 if (!e) fs._registerEntry(k, entry, chain);
+//console.log(Date.now()-start, "ms for uncached fs._sharedEntryForPath");
                 cb.apply(this, arguments);
             });
         };
