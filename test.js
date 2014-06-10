@@ -72,7 +72,6 @@ function startTests(vol, waitTime) {
     fs.mkdir(BASE_DIR, function (e) {
         assert(!e, "No error from fs.mkdir");
         fs.readdir(BASE_DIR, function (e,arr) {
-console.error(e);
             assert(!e, "No error from fs.readdir");
             assert(arr.length === 0 , "No files in BASE_DIR yet.");
         });

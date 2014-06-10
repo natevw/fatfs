@@ -287,7 +287,7 @@ dir.addFile = function (vol, dirChain, name, opts, cb) {
         while (off < paddedName.length) entries.push({
             Ord: ord++,
             Name1: paddedName.slice(off, off+=S_lde_f.Name1.size/2),
-            Attr: S.longDirFlag,
+            Attr_raw: S.longDirFlag,
             Chksum: null,
             Name2: paddedName.slice(off, off+=S_lde_f.Name2.size/2),
             Name3: paddedName.slice(off, off+=S_lde_f.Name3.size/2)
