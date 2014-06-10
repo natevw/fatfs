@@ -45,8 +45,11 @@ dir.iterator = function (dirChain, opts) {
             }
             
             var attrByte = buf[entryIdx+S.dirEntry.fields.Attr.offset],
-                entryType = (attrByte === S.longDirFlag) ? S.longDirEntry : S.dirEntry;
+                entryType = (attrByte === S.longDirFlag) ? S.longDirEntry : S.dirEntry_simple;
+//var t0 = Date.now();
             var entry = entryType.valueFromBytes(buf, off);
+//var t1 = Date.now();
+//console.log(t1-t0, "ms for entry parse");
             entry._pos = entryPos;
             _.log(_.log.DBG, "entry:", entry, secIdx, entryIdx);
             if (entryType === S.longDirEntry) {
@@ -77,7 +80,7 @@ dir.iterator = function (dirChain, opts) {
                         delete long._rem;
                     }
                 } else long = null;
-            } else if (!entry.Attr.volume_id) {
+            } else if ((attrByte & 0x08) === 0) {        // NOTE: checks `!entry.Attr.volume_id`
                 var bestName = null;
                 if (long && long.name) {
                     var pos = entryIdx + S.dirEntry.fields['Name'].offset,
@@ -94,8 +97,18 @@ dir.iterator = function (dirChain, opts) {
                     bestName = (ext) ? nam+'.'+ext : nam;
                 }
                 entry._name = bestName;
-                entry._size = entry.FileSize;
-                entry._firstCluster = (entry.FstClusHI << 16) + entry.FstClusLO;
+                
+                // OPTIMIZATION: avoid processing any fields for non-matching entries
+                // TODO: we could make this automatic via getters, but…?
+                var _entryBuffer = buf.slice(off.bytes, off.bytes+S.dirEntry.size);
+                entry._full = function () {
+                    var _entry = S.dirEntry.valueFromBytes(_entryBuffer);
+                    _.extend(entry, _entry);
+                    entry._size = entry.FileSize;
+                    entry._firstCluster = (entry.FstClusHI << 16) + entry.FstClusLO;
+                    return entry;
+                };
+                
                 long = null;
                 return cb(null, entry, entryPos);
             } else long = null;
@@ -362,7 +375,7 @@ dir._findInDirectory = function (vol, dirChain, name, cb) {
         next = next(function (e, d) {
             if (e) cb(e);
             else if (!d) cb(S.err.NOENT());
-            else if (d._name.toUpperCase() === name) return cb(null, d);
+            else if (d._name.toUpperCase() === name) return cb(null, d._full());
             else processNext(next);
         });
     }

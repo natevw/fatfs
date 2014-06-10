@@ -112,7 +112,6 @@ var _date = _.struct([
     size: _date.size
 };
 
-
 exports.dirEntry = _.struct([
     _.struct('Name', [
         _.char('filename',8),
@@ -142,12 +141,31 @@ exports.entryDoneFlag = 0x00;
 exports.entryFreeFlag = 0xE5;
 exports.entryIsE5Flag = 0x05;
 
+exports.dirEntry_simple = _.struct([
+    _.struct('Name', [
+        _.char('filename',8),
+        _.char('extension',3)
+    ]),
+    _.padTo(exports.dirEntry.size)
+    /*
+    _.uint8('Attr_raw'),
+    _.byte('NTRes', 1),
+    _.byte('Crt_raw', 1+2+2),
+    _.byte('Lst_raw', 2),
+    _.uint16le('FstClusHI'),
+    _.byte('Wrt_raw', 2+2),
+    _.uint16le('FstClusLO'),
+    _.uint32le('FileSize')
+    */
+]);
+
+
 exports.lastLongFlag = 0x40;
 exports.longDirFlag = 0x0F;
 exports.longDirEntry = _.struct([
     _.uint8('Ord'),
     _.char16le('Name1', 10),
-    _.uint8('Attr'),
+    _.uint8('Attr_raw'),
     _.uint8('Type'),
     _.uint8('Chksum'),
     _.char16le('Name2', 12),

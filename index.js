@@ -65,12 +65,13 @@ exports.createFileSystem = function (volume, opts, cb) {
             entriesByPath[k] = {e:entry, c:chain, s:1};
         };
         fs._sharedEntryForPath = function (path, cb) {
-//var start = Date.now();
+var start = Date.now();
             var k = _.absolutePath(path);
             if (k in entriesByPath) entriesByPath[k].s += 1, _.delayedCall(cb, null, entriesByPath[k].e, entriesByPath[k].c);
             else dir.entryForPath(vol, path, function (e, entry, chain) {
                 if (!e) fs._registerEntry(k, entry, chain);
-//console.log(Date.now()-start, "ms for uncached fs._sharedEntryForPath");
+var diff = Date.now()-start;
+console.log(diff.toFixed(0), "ms for fs._sharedEntryForPath to get reponse from dir.entryForPath");
                 cb.apply(this, arguments);
             });
         };
