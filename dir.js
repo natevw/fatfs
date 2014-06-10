@@ -100,7 +100,7 @@ dir.iterator = function (dirChain, opts) {
                 
                 // OPTIMIZATION: avoid processing any fields for non-matching entries
                 // TODO: we could make this automatic via getters, but…?
-                var _entryBuffer = buf.slice(off.bytes, off.bytes+S.dirEntry.size);
+                var _entryBuffer = buf.slice(off.bytes-S.dirEntry.size, off.bytes);
                 entry._full = function () {
                     var _entry = S.dirEntry.valueFromBytes(_entryBuffer);
                     _.extend(entry, _entry);
