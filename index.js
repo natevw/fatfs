@@ -58,20 +58,16 @@ exports.createFileSystem = function (volume, opts, cb) {
         vol = require("./vol.js").init(volume, opts, bootSector);
         fs._dirIterator = dir.iterator.bind(dir);
         
-        //fs._entryForPath = dir.entryForPath.bind(dir, vol);
         var entriesByPath = Object.create(null);
         fs._registerEntry = function (k, entry, chain) {
             entry._k = k;
             entriesByPath[k] = {e:entry, c:chain, s:1};
         };
-        fs._sharedEntryForPath = function (path, cb) {
-//var start = Date.now();
+        fs._sharedEntryForPath = function (path, opts, cb) {
             var k = _.absolutePath(path);
             if (k in entriesByPath) entriesByPath[k].s += 1, _.delayedCall(cb, null, entriesByPath[k].e, entriesByPath[k].c);
-            else dir.entryForPath(vol, path, function (e, entry, chain) {
+            else dir.entryForPath(vol, path, opts, function (e, entry, chain) {
                 if (!e) fs._registerEntry(k, entry, chain);
-//var diff = Date.now()-start;
-//console.log(diff.toFixed(0), "ms for fs._sharedEntryForPath to get response from dir.entryForPath");
                 cb.apply(this, arguments);
             });
         };
@@ -106,9 +102,9 @@ exports.createFileSystem = function (volume, opts, cb) {
         if (vol.opts.ro && (f.write || f.create || f.truncate)) return _.delayedCall(cb, S.err.ROFS());
         else _fd.flags = f;
         
-        fs._sharedEntryForPath(path, function (e,entry,chain) {
+        fs._sharedEntryForPath(path, {prepareForCreate:f.create}, function (e,entry,chain) {
             if (e && !(e.code === 'NOENT' && f.create && entry)) cb(e);
-            else if (e) fs._addFile(chain, entry._missingFile, {dir:f._openDir}, function (e,newEntry,newChain) {
+            else if (e) fs._addFile(chain, entry, {dir:f._openDir}, function (e,newEntry,newChain) {
                 if (e) cb(e);
                 else fs._registerEntry(_.absolutePath(path), newEntry, newChain), finish(newEntry, newChain);
             });

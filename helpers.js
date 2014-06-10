@@ -88,6 +88,8 @@ exports.shortname = function (name) {
         basis3 = basis3.slice(0,3);
         lossy = true;
     } else while (basis3.length < 3) basis3 += ' ';
+    
+    return {filename:basis8, extension:basis3, _lossy:lossy};
     return {basis:[basis8,basis3], lossy:lossy};
 };
 //shortname("autoexec.bat") => {basis:['AUTOEXEC','BAT'],lossy:false}

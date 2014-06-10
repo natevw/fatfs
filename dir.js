@@ -254,19 +254,19 @@ dir.init = function (vol, dirChain, cb) {
     dirChain.writeToPosition(0, initialCluster, cb);
 };
 
-dir.addFile = function (vol, dirChain, name, opts, cb) {
+dir.addFile = function (vol, dirChain, entryInfo, opts, cb) {
     if (typeof opts === 'function') {
         cb = opts;
         opts = {};
     }
-    var entries = [], mainEntry = null,
-        short = _.shortname(name);
+    var name = entryInfo.name,
+        entries = [], mainEntry;
     entries.push(mainEntry = {
-        Name: {filename:short.basis[0], extension:short.basis[1]},
+        Name: _.shortname(name),
         Attr: {directory:opts.dir},
         _name: name
     });
-    if (1 || short.lossy) {         // HACK: always write long names until short.lossy more useful!
+    if (1 || mainEntry.Name._lossy) {         // HACK: always write long names until `._lossy` is more useful!
         // name entries should be 0x0000-terminated and 0xFFFF-filled
         var workaroundTessel427 = ('\uFFFF'.length !== 1);
         var S_lde_f = S.longDirEntry.fields,
@@ -295,94 +295,79 @@ dir.addFile = function (vol, dirChain, name, opts, cb) {
         entries[entries.length - 1].Ord |= S.lastLongFlag;
     }
     
-    function prepareForEntries(cb) {
-        var matchName = name.toUpperCase(),
-            tailName = mainEntry.Name,
-            maxTail = 0;
-        function processNext(next) {
-            next = next(function (e, d, entryPos) {
-                if (e) cb(e);
-                else if (!d) cb(null, {tail:maxTail, target:entryPos, lastEntry:true});
-                else if (d._free) processNext(next);         // TODO: look for long enough reusable run
-                else if (d._name.toUpperCase() === matchName) return cb(S.err.EXIST());
-                else {
-                    var dNum = 1,
-                        dName = d.Name.filename,
-                        dTail = dName.match(/(.*)~(\d+)/);
-                    if (dTail) {
-                        dNum = +dTail[2];
-                        dName = dTail[1];
-                    }
-                    if (tailName.extension === d.Name.extension &&
-                        tailName.filename.indexOf(dName) === 0)
-                    {
-                        maxTail = Math.max(dNum+1, maxTail);
-                    }
-                    processNext(next);
-                }
-            });
-        }
-        processNext(dir.iterator(dirChain, {includeFree:true}));
+    if (entryInfo.tail) {
+        var name = mainEntry.Name.filename,
+            suffix = '~'+entryInfo.tail,
+            endIdx = name.indexOf(' '),
+            sufIdx = (~endIdx) ? Math.min(endIdx, name.length-suffix.length) : name.length-suffix.length;
+        if (sufIdx < 0) return cb(S.err.NAMETOOLONG());         // TODO: would EXIST be more correct?
+        mainEntry.Name.filename = name.slice(0,sufIdx)+suffix+name.slice(sufIdx+suffix.length);
+        _.log(_.log.DBG, "Shortname amended to:", mainEntry.Name);
     }
     
-    prepareForEntries(function (e, d) {
+    vol.allocateInFAT(dirChain.toJSON().firstCluster || 2, function (e,fileCluster) {
         if (e) return cb(e);
         
-        if (d.tail) {
-            var name = mainEntry.Name.filename,
-                suffix = '~'+d.tail,
-                endIdx = name.indexOf(' '),
-                sufIdx = (~endIdx) ? Math.min(endIdx, name.length-suffix.length) : name.length-suffix.length;
-            if (sufIdx < 0) return cb(S.err.NAMETOOLONG());         // TODO: would EXIST be more correct?
-            mainEntry.Name.filename = name.slice(0,sufIdx)+suffix+name.slice(sufIdx+suffix.length);
-            _.log(_.log.DBG, "Shortname amended to:", mainEntry.Name);
-        }
+        var nameBuf = S.dirEntry.fields['Name'].bytesFromValue(mainEntry.Name),
+            nameSum = _.checksumName(nameBuf);
+        // TODO: finalize initial properties… (via `opts.mode` instead?)
+        _updateEntry(vol, mainEntry, {firstCluster:fileCluster, size:0, ctime:true,_touch:true});
+        mainEntry._pos = _.adjustedPos(vol, entryInfo.target, S.dirEntry.size*(entries.length-1));
+        entries.slice(1).forEach(function (entry) {
+            entry.Chksum = nameSum;
+        });
+        entries.reverse();
+        if (entryInfo.lastEntry) entries.push({});
         
-        vol.allocateInFAT(dirChain.toJSON().firstCluster || 2, function (e,fileCluster) {
-            if (e) return cb(e);
-            
-            var nameBuf = S.dirEntry.fields['Name'].bytesFromValue(mainEntry.Name),
-                nameSum = _.checksumName(nameBuf);
-            // TODO: finalize initial properties… (via `opts.mode` instead?)
-            _updateEntry(vol, mainEntry, {firstCluster:fileCluster, size:0, ctime:true,_touch:true});
-            mainEntry._pos = _.adjustedPos(vol, d.target, S.dirEntry.size*(entries.length-1));
-            entries.slice(1).forEach(function (entry) {
-                entry.Chksum = nameSum;
-            });
-            entries.reverse();
-            if (d.lastEntry) entries.push({});
-            
-            var entriesData = new Buffer(S.dirEntry.size*entries.length),
-                dataOffset = {bytes:0};
-            entries.forEach(function (entry) {
-                var entryType = ('Ord' in entry) ? S.longDirEntry : S.dirEntry;
-                entryType.bytesFromValue(entry, entriesData, dataOffset);
-            });
-            
-            _.log(_.log.DBG, "Writing", entriesData.length, "byte directory entry", mainEntry, "into", dirChain.toJSON(), "at", d.target);
-            dirChain.writeToPosition(d.target, entriesData, function (e) {
-                // TODO: if we get error, what/should we clean up?
-                if (e) cb(e);
-                else cb(null, mainEntry, vol.chainForCluster(fileCluster, dirChain));
-            });
+        var entriesData = new Buffer(S.dirEntry.size*entries.length),
+            dataOffset = {bytes:0};
+        entries.forEach(function (entry) {
+            var entryType = ('Ord' in entry) ? S.longDirEntry : S.dirEntry;
+            entryType.bytesFromValue(entry, entriesData, dataOffset);
+        });
+        
+        _.log(_.log.DBG, "Writing", entriesData.length, "byte directory entry", mainEntry, "into", dirChain.toJSON(), "at", entryInfo.target);
+        dirChain.writeToPosition(entryInfo.target, entriesData, function (e) {
+            // TODO: if we get error, what/should we clean up?
+            if (e) cb(e);
+            else cb(null, mainEntry, vol.chainForCluster(fileCluster, dirChain));
         });
     });
 };
 
-dir._findInDirectory = function (vol, dirChain, name, cb) {
-    name = name.toUpperCase();
+dir._findInDirectory = function (vol, dirChain, name, opts, cb) {
+    var matchName = name.toUpperCase(),
+        tailName = (opts.prepareForCreate) ? _.shortname(name) : null,
+        maxTail = 0;
+    
     function processNext(next) {
-        next = next(function (e, d) {
+        next = next(function (e, d, entryPos) {
             if (e) cb(e);
-            else if (!d) cb(S.err.NOENT());
-            else if (d._name.toUpperCase() === name) return cb(null, d._full());
-            else processNext(next);
+            else if (!d) cb(S.err.NOENT(), {tail:maxTail, target:entryPos, lastEntry:true});
+            else if (d._free) processNext(next);         // TODO: look for long enough reusable run
+            else if (d._name.toUpperCase() === matchName) return cb(null, d._full());
+            else if (!opts.prepareForCreate) processNext(next);
+            else {
+                var dNum = 1,
+                    dName = d.Name.filename,
+                    dTail = dName.match(/(.*)~(\d+)/);
+                if (dTail) {
+                    dNum = +dTail[2];
+                    dName = dTail[1];
+                }
+                if (tailName.extension === d.Name.extension &&
+                    tailName.filename.indexOf(dName) === 0)
+                {
+                    maxTail = Math.max(dNum+1, maxTail);
+                }
+                processNext(next);
+            }
         });
     }
-    processNext(dir.iterator(dirChain));
+    processNext(dir.iterator(dirChain, {includeFree:(0 && opts.prepareForCreate)}));
 };
 
-dir.entryForPath = function (vol, path, cb) {
+dir.entryForPath = function (vol, path, opts, cb) {
     var spets = _.absoluteSteps(path).reverse();
     function findNext(chain) {
         var name = spets.pop();
@@ -391,8 +376,8 @@ dir.entryForPath = function (vol, path, cb) {
             // TODO: *real* fake entry for root directory
             Attr: {directory:true}, FileSize: 0
         }, chain);
-        else dir._findInDirectory(vol, chain, name, function (e,entry) {
-            if (e) cb(e, (spets.length) ? null : {_missingFile:name}, chain);
+        else dir._findInDirectory(vol, chain, name, opts, function (e,entry) {
+            if (e) cb(e, (spets.length) ? null : _.extend(entry, {name:name}), chain);
             else {
                 var _chain = vol.chainForCluster(entry._firstCluster);
                 if (spets.length) {
