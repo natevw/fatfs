@@ -13,6 +13,7 @@ function _baseChain(vol) {
         return {sector:sector, offset:offset};
     }
     
+    // TODO: use bulk reads whenever possible!
     chain.readFromPosition = function (targetPos, buffer, cb) {
         if (typeof targetPos === 'number') targetPos = posFromOffset(targetPos);
         if (typeof buffer === 'number') buffer = new Buffer(buffer);
@@ -31,6 +32,7 @@ function _baseChain(vol) {
         _readFromChain(targetPos.sector, targetPos.offset, 0);
     };
     
+    // TODO: use bulk writes whenever possible!
     chain.writeToPosition = function (targetPos, data, cb) {
         _.log(_.log.DBG, "WRITING", data.length, "bytes at", targetPos, "in", this.toJSON(), data);
         if (typeof targetPos === 'number') targetPos = posFromOffset(targetPos);
@@ -58,11 +60,6 @@ function _baseChain(vol) {
             });
         }
         _writeToChain(targetPos.sector, targetPos.offset, data);
-    };
-    
-    chain._clearSectors = function (start, count, cb) {
-        
-    
     };
     
     return chain;
@@ -94,14 +91,6 @@ exports.clusterChain = function (vol, firstCluster, _parent) {
         });
     }
     
-    function fillCluster(c, val, cb) {
-        var buf = new Buffer(chain.sectorSize*vol._sectorsPerCluster);
-        buf.fill(val);
-        // ~HACK: bypass chain and go straight to vol's bulk-write method
-        // TODO: update `chain.writeToPosition` to do this so more can benefit…
-        vol._writeSector(vol._firstSectorOfCluster(c), buf, cb);
-    }
-    
     function expandChainToLength(clusterCount, cb) {
         if (!_cacheIsComplete()) throw Error("Must be called only when cache is complete!");
         else cache.pop();            // remove 'eof' entry until finished
@@ -114,10 +103,7 @@ exports.clusterChain = function (vol, firstCluster, _parent) {
                     if (e) return cb(e);
                     
                     cache.push(newCluster);
-                    fillCluster(newCluster, 0, function (e) {
-                        if (e) cb(e);
-                        else addCluster(clustersNeeded-1, newCluster);
-                    });
+                    addCluster(clustersNeeded-1, newCluster);
                 });
             });
         }
@@ -135,12 +121,9 @@ exports.clusterChain = function (vol, firstCluster, _parent) {
                 else removeClusters(count - 1, cb);
             });
         }
+        // NOTE: for now, we don't remove the firstCluster ourselves; we should though!
         if (clusterCount) removeClusters(cache.length - clusterCount, cb);
-        else removeClusters(cache.length - 1, function (e) {
-            // we never remove the firstCluster ourselves; clear it instead…
-            if (e) cb(e);
-            else fillCluster(cache[0], 0, cb);
-        });
+        else removeClusters(cache.length - 1, cb);
     }
     
     function firstSectorOfClusterAtIdx(i, alloc, cb) {

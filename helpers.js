@@ -173,6 +173,12 @@ exports.adjustedPos = function (vol, pos, bytes) {
 
 exports.extend = _xok;
 
+exports.filledBuffer = function (len, val) {
+    var b = new Buffer(len);
+    b.fill(val);
+    return b;
+};
+
 var _prevDbg = Date.now(),
     _thresh = 50;
 

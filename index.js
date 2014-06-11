@@ -200,6 +200,15 @@ exports.createFileSystem = function (volume, opts, cb) {
         
         var _pos = (pos === null || _fd.flags.append) ? _fd.pos : pos,
             _buf = buf.slice(off,off+len);
+        if (_pos > _fd.entry._size) {
+            // TODO: handle huge jumps by zeroing clusters individually?
+            var padLen = _pos - _fd.entry._size,
+                padBuf = new Buffer(padLen + _buf.length);
+            padBuf.fill(0x00, 0, padLen);
+            _buf.copy(padBuf, padLen);
+            _pos = _fd.entry._size;
+            _buf = padBuf;
+        }
         _fd.chain.writeToPosition(_pos, _buf, function (e) {
             _fd.pos = _pos + len;
             var newSize = Math.max(_fd.entry._size, _fd.pos),
@@ -214,15 +223,14 @@ exports.createFileSystem = function (volume, opts, cb) {
         var _fd = fileDescriptors[fd];
         if (!_fd || !_fd.flags.write) _.delayedCall(cb, S.err.BADF());
         
-        var numSectors = Math.ceil(len / _fd.chain.sectorSize),
-            newStats = {size:len,_touch:true};
+        var newStats = {size:len,_touch:true};
         // NOTE: we order operations for best state in case of only partial success
         if (len === _fd.entry._size) _.delayedCall(cb);
         else if (len < _fd.entry._size) fs._updateEntry(_fd.entry, newStats, function (e) {
             if (e) cb(e);
-            else _fd.chain.truncate(numSectors, cb);
-        });
-        else _fd.chain.truncate(numSectors, function (e) {
+            else _fd.chain.truncate(Math.ceil(len / _fd.chain.sectorSize), cb);
+        });     // TODO: handle huge file expansions without as much memory pressure
+        else _fd.chain.writeToPosition(_fd.entry._size, _.filledBuffer(len-_fd.entry._size, 0x00), function (e) {
             if (e) cb(e);
             else fs._updateEntry(_fd.entry, newStats, cb);
         });
