@@ -204,7 +204,6 @@ exports.createFileSystem = function (volume, opts, cb) {
             _fd.pos = _pos + len;
             var newSize = Math.max(_fd.entry._size, _fd.pos),
                 newInfo = {size:newSize,_touch:true};
-            // TODO: figure out why this silently fails on FAT12
             fs._updateEntry(_fd.entry, newInfo, function (ee) {
                 cb(e||ee, len, buf);
             });
