@@ -20,7 +20,7 @@ function _baseChain(vol) {
                  So we divide the read into [up to] three parts: {preface, main, trailer}
                  This is kind of unfortunate, but in practice should often still be reasonably efficient. */
         if (targetPos.offset) chain.readSectors(targetPos.sector, Buffer(chain.sectorSize), function (e,d) {
-            if (e) cb(e, 0, buffer);
+            if (e || !d) cb(e, 0, buffer);
             else {  // copy preface into `buffer`
                 var dBeg = targetPos.offset,
                     dEnd = dBeg + buffer.length;
@@ -35,14 +35,14 @@ function _baseChain(vol) {
                 mainSector = (prefaceLen) ? targetPos.sector + 1 : targetPos.sector,
                 mainBuffer = (trailerLen) ? buffer.slice(prefaceLen, -trailerLen) : buffer.slice(prefaceLen);
             if (mainBuffer.length) chain.readSectors(mainSector, mainBuffer, function (e,d) {
-                if (e) cb(e, prefaceLen, buffer);
+                if (e || !d) cb(e, prefaceLen, buffer);
                 else if (!trailerLen) cb(null, buffer.length, buffer);
                 else readTrailer();
             }); else readTrailer();
             function readTrailer() {
                 var trailerSector = mainSector + (mainBuffer.length / chain.sectorSize);
                 chain.readSectors(trailerSector, Buffer(chain.sectorSize), function (e,d) {
-                    if (e) cb(e, buffer.length-trailerLen, buffer);
+                    if (e || !d) cb(e, buffer.length-trailerLen, buffer);
                     else {
                         d.copy(buffer, buffer.length-trailerLen, 0, trailerLen);
                         cb(null, buffer.length, buffer);
