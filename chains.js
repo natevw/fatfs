@@ -160,18 +160,63 @@ exports.clusterChain = function (vol, firstCluster, _parent) {
         });
     }
     
-    chain.readSectors = function (i, dest, cb) {
-        var o = i % vol._sectorsPerCluster,
-            c = (i - o) / vol._sectorsPerCluster;
-        if (dest.length > vol._sectorSize * vol._sectorsPerCluster) {
-            // TODO: figure out which contiguous chunks need fetching
-            console.warn("Trying to read", dest.length, "bytes, more than a single cluster!");
-            throw S.err._TODO();
-        }
-        firstSectorOfClusterAtIdx(c, false, function (e,s) {
+    // [{firstSector,numSectors},{firstSector,numSectors},…]
+    function determineSectorGroups(sectorIdx, numSectors, alloc, cb) {
+        var sectorOffset = sectorIdx % vol._sectorsPerCluster,
+            clusterIdx = (sectorIdx - sectorOffset) / vol._sectorsPerCluster,
+            numClusters = Math.ceil((numSectors + sectorOffset) / vol._sectorsPerCluster),
+            chainLength = clusterIdx + numClusters;
+        extendCacheToInclude(chainLength-1, function (e,c) {
             if (e) cb(e);
-            else if (s >= 0) vol._readSectors(s+o, dest, cb);
-            else _pastEOF(cb);
+            else if (c === 'eof') {
+                if (alloc) expandChainToLength(chainLength, function (e) {
+                    if (e) cb(e);
+                    else _determineSectorGroups();
+                });
+                else _determineSectorGroups();
+            }
+            else _determineSectorGroups();
+        });
+        function _determineSectorGroups() {
+            // …now we have a complete cache
+            var groups = [],
+                _group = null;
+            for (var i = clusterIdx; i < chainLength; ++i) {
+                var c = cache[i];
+                if (c === 'eof') break;
+                else if (_group && c !== _group._nextCluster) {
+                    groups.push(_group);
+                    _group = null;
+                }
+                if (!_group) _group = {
+                   _nextCluster: c+1,
+                   firstSector: vol._firstSectorOfCluster(c) + sectorOffset,
+                   numSectors: vol._sectorsPerCluster - sectorOffset
+                }; else {
+                    _group._nextCluster += 1;
+                    _group.numSectors += vol._sectorsPerCluster;
+                }
+                sectorOffset = 0;       // only first group is offset
+            }
+            if (_group) groups.push(_group);
+            cb(null, groups, i === chainLength);
+        }
+    }
+    
+    chain.readSectors = function (i, dest, cb) {
+        var groupOffset = 0, groupsPending;
+        determineSectorGroups(i, dest.length / chain.sectorSize, false, function (e, groups, complete) {
+            if (e) cb(e);
+            else if (!complete) _pastEOF(cb);
+            else groupsPending = groups.length, groups.forEach(function (group) {
+                var groupLength = group.numSectors * chain.sectorSize,
+                    groupBuffer = dest.slice(groupOffset, groupOffset += groupLength);
+                vol._readSectors(group.firstSector, dest, function (e,d) {
+                    if (e && groupsPending !== -1) groupsPending = -1, cb(e);
+                    else if (--groupsPending === 0) cb(null, dest);
+                });
+            });
+            if (!groupsPending) cb(null, dest);     // 0-length destination case
         });
     };
     

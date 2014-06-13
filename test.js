@@ -126,7 +126,7 @@ function startTests(vol, waitTime) {
                             assert(d[0] === 0x42, "Buffer content is correct.");
                             
                             fs.truncate(file, 1025, function (e) {
-                                assert(!e, "No error from fs.truncate (extending)");
+                                assert(!e, "No error from fs.truncate (extending) "+Error().stack);
                                 fs.readFile(file, function (e, d) {
                                     assert(!e, "Still no error from fs.readFile after extension");
                                     assert(d.length === 1025, "Read after extension is correct size.");
