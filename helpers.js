@@ -151,6 +151,7 @@ exports.fmtHex = function (n, ff) {
 };
 
 exports.delayedCall = function (fn) {
+    if (!fn) throw Error("No function provided!");      // debug aid
     var ctx = this,
         args = Array.prototype.slice.call(arguments, 1);
     process.nextTick(function () {

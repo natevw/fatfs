@@ -46,17 +46,17 @@ exports.init = function (volume, opts, bootSector) {
     
     volume = $.wrapDriver(volume);
     
-    vol._readSector = function (secNum, dest, cb) {
+    vol._readSectors = function (secNum, dest, cb) {
         if (typeof dest === 'function') {
             cb = dest;
             dest = new Buffer(vol._sectorSize);
         }
-        _.log(_.log.DBG, "vol._readSector", secNum, dest.length);
+        _.log(_.log.DBG, "vol._readSectors", secNum, dest.length);
         if (secNum < volume.numSectors) volume.readSectors(secNum, dest, function (e) { cb(e, dest); });
         else throw Error("Invalid sector number!");
     };
     
-    vol._writeSector = function (secNum, data, cb) {
+    vol._writeSectors = function (secNum, data, cb) {
         _.log(_.log.DBG, "vol._writeSector", secNum, data.length);
         // NOTE: these are internal assertions, public API will get proper `S.err`s
         if (data.length % volume.sectorSize) throw Error("Buffer length not a multiple of sector size");

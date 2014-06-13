@@ -9,7 +9,7 @@ dir.iterator = function (dirChain, opts) {
     var cache = {buffer:null, n: null};
     function getSectorBuffer(n, cb) {
         if (cache.n === n) cb(null, cache.buffer);
-        else cache.n = cache.buffer = null, dirChain.readSector(n, function (e,d) {
+        else cache.n = cache.buffer = null, dirChain.readSectors(n, Buffer(dirChain.sectorSize), function (e,d) {
             if (e) cb(e);
             else if (!d) return cb(null, null);
             else {
