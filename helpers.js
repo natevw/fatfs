@@ -154,7 +154,7 @@ exports.delayedCall = function (fn) {
     if (!fn) throw Error("No function provided!");      // debug aid
     var ctx = this,
         args = Array.prototype.slice.call(arguments, 1);
-    process.nextTick(function () {
+    setImmediate(function () {
         fn.apply(ctx, args);
     });
 };
