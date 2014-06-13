@@ -264,7 +264,7 @@ dir.addFile = function (vol, dirChain, entryInfo, opts, cb) {
         entries = [], mainEntry;
     entries.push(mainEntry = {
         Name: _.shortname(name),
-        Attr: {directory:opts.dir},
+        Attr: {directory:opts.dir||false},
         _name: name
     });
     if (1 || mainEntry.Name._lossy) {         // HACK: always write long names until `._lossy` is more useful!
