@@ -179,7 +179,7 @@ exports.clusterChain = function (vol, firstCluster, _parent) {
             var groups = [],
                 _group = null;
             for (var i = clusterIdx; i < chainLength; ++i) {
-                var c = cache[i];
+                var c = (i < cache.length) ? cache[i] : 'eof';
                 if (c === 'eof') break;
                 else if (_group && c !== _group._nextCluster) {
                     groups.push(_group);
