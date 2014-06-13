@@ -40,9 +40,9 @@ function _baseChain(vol) {
                 else readTrailer();
             }); else readTrailer();
             function readTrailer() {
-                var trailerSector = mainSector + (mainBuffer.length % chain.sectorSize);
+                var trailerSector = mainSector + (mainBuffer.length / chain.sectorSize);
                 chain.readSectors(trailerSector, Buffer(chain.sectorSize), function (e,d) {
-                    if (e) cb(e, buffer.length-trailerLen, buffer)
+                    if (e) cb(e, buffer.length-trailerLen, buffer);
                     else {
                         d.copy(buffer, buffer.length-trailerLen, 0, trailerLen);
                         cb(null, buffer.length, buffer);
