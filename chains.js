@@ -168,13 +168,10 @@ exports.clusterChain = function (vol, firstCluster, _parent) {
             chainLength = clusterIdx + numClusters;
         extendCacheToInclude(chainLength-1, function (e,c) {
             if (e) cb(e);
-            else if (c === 'eof') {
-                if (alloc) expandChainToLength(chainLength, function (e) {
-                    if (e) cb(e);
-                    else _determineSectorGroups();
-                });
+            else if (c === 'eof' && alloc) expandChainToLength(chainLength, function (e) {
+                if (e) cb(e);
                 else _determineSectorGroups();
-            }
+            });
             else _determineSectorGroups();
         });
         function _determineSectorGroups() {
