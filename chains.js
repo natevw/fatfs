@@ -211,7 +211,7 @@ exports.clusterChain = function (vol, firstCluster, _parent) {
             else groupsPending = groups.length, groups.forEach(function (group) {
                 var groupLength = group.numSectors * chain.sectorSize,
                     groupBuffer = dest.slice(groupOffset, groupOffset += groupLength);
-                vol._readSectors(group.firstSector, dest, function (e,d) {
+                vol._readSectors(group.firstSector, groupBuffer, function (e,d) {
                     if (e && groupsPending !== -1) groupsPending = -1, cb(e);
                     else if (--groupsPending === 0) cb(null, dest);
                 });
