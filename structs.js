@@ -58,25 +58,22 @@ exports.boot32 = _.struct([
 var _time = _.struct([
     _.ubit('hours',5),
     _.ubit('minutes',6),
-    _.ubit('seconds',5)
+    _.ubit('seconds_2',5)
 ]), time = {
     valueFromBytes: function (buf, off) {
         off || (off = {bytes:0});
         
         var _buf = new Buffer([buf[off.bytes+1], buf[off.bytes+0]]),
             val = _time.valueFromBytes(_buf);
-        val.seconds *= 2;
         off.bytes += this.size;
         return val;
     },
     bytesFromValue: function (val, buf, off) {
-        val || (val = {hours:0, minutes:0, seconds:0});
+        val || (val = {hours:0, minutes:0, seconds_2:0});
         buf || (buf = new Buffer(this.size));
         off || (off = {bytes:0});
         
-        var _sec = val.seconds,
-            _buf = (val.seconds >>>= 1, _time.bytesFromValue(val));
-        val.seconds = _sec;
+        var _buf = _time.bytesFromValue(val);
         buf[off.bytes+1] = _buf[0];
         buf[off.bytes+0] = _buf[1];
         off.bytes += this.size;

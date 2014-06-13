@@ -134,7 +134,7 @@ function _updateEntry(vol, entry, newStats) {
         if (d === true) d = _now || (_now = new Date());
         entry[prefix+'Date'] = {year:d.getFullYear()-1980, month:d.getMonth()+1, day:d.getDate()};
         if (timeToo) {
-            entry[prefix+'Time'] = {hours:d.getHours(), minutes:d.getMinutes(), seconds:d.getSeconds()};
+            entry[prefix+'Time'] = {hours:d.getHours(), minutes:d.getMinutes(), seconds_2:d.getSeconds()>>>1};
             if (tenthToo) {
                 var msec = (d.getSeconds() % 2)*1000 + d.getMilliseconds();
                 entry[prefix+'TimeTenth'] = Math.floor(msec / 100);
@@ -217,13 +217,14 @@ dir.makeStat = function (vol, entry) {
     
     function extractDate(prefix) {
         var date = entry[prefix+'Date'],
-            time = entry[prefix+'Time'] || {hours:0, minutes:0, seconds:0},
+            time = entry[prefix+'Time'] || {hours:0, minutes:0, seconds_2:0},
+            secs = time.seconds_2 * 2,
             sect = entry[prefix+'TimeTenth'] || 0;
         if (sect > 100) {
-            time.seconds += 1;
+            secs += 1;
             sect -= 100;
         }
-        return new Date(date.year+1980, date.month-1, date.day, time.hours, time.minutes, time.seconds, sect*100);
+        return new Date(date.year+1980, date.month-1, date.day, time.hours, time.minutes, secs, sect*100);
     }
     stats.atime = extractDate('LstAcc');
     stats.mtime = extractDate('Wrt');
