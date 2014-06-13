@@ -4,7 +4,6 @@ var S = require("./structs.js"),
 function _baseChain(vol) {
     var chain = {};
     
-    chain.cacheAdvice = 'NORMAL';
     chain.sectorSize = vol._sectorSize;
     
     function posFromOffset(off) {
@@ -14,10 +13,14 @@ function _baseChain(vol) {
         return {sector:sector, offset:offset};
     }
     
-    var sectorCache = Object.create(null);
-    // TODO: manage sectorCache according to cacheAdvice
-    chain._vol_readSectors = vol._readSectors.bind(vol);
-    chain._vol_writeSectors = vol._writeSectors.bind(vol);
+    var sectorCache = vol._makeCache();
+    Object.defineProperty(chain, 'cacheAdvice', {
+        enumerable: true,
+        get: function () { return sectorCache.advice(); },
+        set: function (v) { sectorCache.advice(v); }
+    });
+    chain._vol_readSectors = vol._readSectors.bind(vol, sectorCache);
+    chain._vol_writeSectors = vol._writeSectors.bind(vol, sectorCache);
     
     chain.readFromPosition = function (targetPos, buffer, cb) {
         if (typeof targetPos === 'number') targetPos = posFromOffset(targetPos);

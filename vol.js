@@ -44,24 +44,26 @@ exports.init = function (volume, opts, bootSector) {
         return firstDataSector + (n-2)*vol._sectorsPerCluster;
     };
     
-    volume = $.wrapDriver(volume);
+    vol._makeCache = function () {
+        return $.wrapDriver(volume);
+    };
     
-    vol._readSectors = function (secNum, dest, cb) {
+    vol._readSectors = function (cache, secNum, dest, cb) {
         if (typeof dest === 'function') {
             cb = dest;
             dest = new Buffer(vol._sectorSize);
         }
         _.log(_.log.DBG, "vol._readSectors", secNum, dest.length);
-        if (secNum < volume.numSectors) volume.readSectors(secNum, dest, function (e) { cb(e, dest); });
+        if (secNum < volume.numSectors) cache.readSectors(secNum, dest, function (e) { cb(e, dest); });
         else throw Error("Invalid sector number!");
     };
     
-    vol._writeSectors = function (secNum, data, cb) {
+    vol._writeSectors = function (cache, secNum, data, cb) {
         _.log(_.log.DBG, "vol._writeSector", secNum, data.length);
         // NOTE: these are internal assertions, public API will get proper `S.err`s
         if (data.length % volume.sectorSize) throw Error("Buffer length not a multiple of sector size");
         else if (opts.ro) throw Error("Read-only filesystem");
-        else if (secNum < volume.numSectors) volume.writeSectors(secNum, data, cb);
+        else if (secNum < volume.numSectors) cache.writeSectors(secNum, data, cb);
         else throw Error("Invalid sector number!");
     };
     

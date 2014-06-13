@@ -6,6 +6,7 @@ exports.wrapDriver = function (volume, opts) {
     }, opts);
     
     var cache = {},
+        advice = 'NORMAL',
         secSize = volume.sectorSize;
     
     function _freezeBuffer(b) {
@@ -15,6 +16,7 @@ exports.wrapDriver = function (volume, opts) {
     }
     
     function addToCache(i, data) {
+        if (advice === 'SEQUENTIAL' || advice === 'NOREUSE') return;
         data = _freezeBuffer(data);
         cache[i] = data;
         //if (data.length > secSize) addToCache(i+1, data.slice(secSize));
@@ -32,12 +34,20 @@ exports.wrapDriver = function (volume, opts) {
     return {
         sectorSize: volume.sectorSize,
         numSectors: volume.numSectors,
+        advice: function (val) {
+            if (!arguments) return adviceSource;
+            else advice = val;
+            if (advice === 'SEQUENTIAL' || advice === 'NOREUSE') cache = {};
+            return this;
+        },
         readSectors: function (i, dest, cb) {
             // TODO: handle having partial parts of dest!
             if (i in cache && dest.length === secSize) {
+//console.log("-in cache-", i);
                 cache[i].copy(dest);
                 setImmediate(cb);
             } else volume.readSectors(i, dest, function (e) {
+//console.log("HAD TO READ", i, advice, dest.toString(), Error().stack);
                 if (e) cb(e);
                 else addToCache(i, dest), cb();
             });

@@ -74,7 +74,10 @@ exports.createFileSystem = function (volume, opts, cb) {
         fs._releaseEntry = function (entry) {
             if (!entry._k) throw Error("Can't release entry not obtained via _sharedEntryForPath!");
             var d = entriesByPath[entry._k];
-            if (!--d.s) delete entriesByPath[entry._k];
+            d.s -= 1;
+            setTimeout(function () {
+                if (!d.s) delete entriesByPath[entry._k];
+            });
         };
         
         fs._updateEntry = dir.updateEntry.bind(dir, vol);
@@ -117,6 +120,7 @@ exports.createFileSystem = function (volume, opts, cb) {
                 _fd.entry = fileEntry;
                 _fd.chain = fileChain;
                 if (f.append) _fd.pos = _fd.entry._size;
+                if (f._openDir) _fd.chain.cacheAdvice = 'WILLNEED';
                 if (f.truncate && _fd.entry._size) fs.ftruncate(fd, 0, function (e) {
                     cb(e, fd);
                 }, '_nested_');
