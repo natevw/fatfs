@@ -4,6 +4,7 @@ var S = require("./structs.js"),
 function _baseChain(vol) {
     var chain = {};
     
+    chain.cacheAdvice = 'NORMAL';
     chain.sectorSize = vol._sectorSize;
     
     function posFromOffset(off) {
@@ -12,6 +13,11 @@ function _baseChain(vol) {
             sector = (off - offset) / secSize;
         return {sector:sector, offset:offset};
     }
+    
+    var sectorCache = Object.create(null);
+    // TODO: manage sectorCache according to cacheAdvice
+    chain._vol_readSectors = vol._readSectors.bind(vol);
+    chain._vol_writeSectors = vol._writeSectors.bind(vol);
     
     chain.readFromPosition = function (targetPos, buffer, cb) {
         if (typeof targetPos === 'number') targetPos = posFromOffset(targetPos);
@@ -208,7 +214,7 @@ exports.clusterChain = function (vol, firstCluster, _parent) {
             else groupsPending = groups.length, groups.forEach(function (group) {
                 var groupLength = group.numSectors * chain.sectorSize,
                     groupBuffer = dest.slice(groupOffset, groupOffset += groupLength);
-                vol._readSectors(group.firstSector, groupBuffer, function (e,d) {
+                chain._vol_readSectors(group.firstSector, groupBuffer, function (e,d) {
                     if (e && groupsPending !== -1) groupsPending = -1, cb(e);
                     else if (--groupsPending === 0) cb(null, dest);
                 });
@@ -228,7 +234,7 @@ exports.clusterChain = function (vol, firstCluster, _parent) {
         firstSectorOfClusterAtIdx(c, true, function (e,s) {
             if (e) cb(e);
             else if (s < 0) cb(S.err.IO());
-            else vol._writeSectors(s+o, data, cb);
+            else chain._vol_writeSectors(s+o, data, cb);
         });
     };
     
@@ -256,12 +262,12 @@ exports.sectorChain = function (vol, firstSector, numSectors) {
     var chain = _baseChain(vol);
     
     chain.readSectors = function (i, dest, cb) {
-        if (i < numSectors) vol._readSectors(firstSector+i, dest, cb);
+        if (i < numSectors) chain._vol_readSectors(firstSector+i, dest, cb);
         else _pastEOF(cb);
     };
     
     chain.writeSectors = function (i, data, cb) {
-        if (i < numSectors) vol._writeSectors(firstSector+i, data, cb);
+        if (i < numSectors) chain._vol_writeSectors(firstSector+i, data, cb);
         else _.delayedCall(cb, S.err.NOSPC());
     };
     

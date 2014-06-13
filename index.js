@@ -236,6 +236,14 @@ exports.createFileSystem = function (volume, opts, cb) {
         });
     }, (_n_ === '_nested_')); };
     
+    // 'NORMAL', 'SEQUENTIAL', 'RANDOM', 'WILLNEED', 'DONTNEED', 'NOREUSE'
+    fs._fadviseSync = function (fd, off, len, advice) {
+        if (off !== 0 || len !== 0) throw Error("Cache advise can currently be given only for whole file!");
+        var _fd = fileDescriptors[fd];
+        if (!_fd) throw S.err.BADF();
+        else _fd.chain.cacheAdvice = advice;
+    };
+    
     fs.fsync = function (fd, cb) {
         // NOTE: we'll need to flush write cache here once we have one…
         var _fd = fileDescriptors[fd];
@@ -277,6 +285,7 @@ exports.createFileSystem = function (volume, opts, cb) {
                 stream.emit('error', e);
             } else {
                 fd = _fd;
+                fs._fadviseSync(fd, 0, 0, 'SEQUENTIAL');
                 stream.emit('open', fd);
             }
         });
@@ -363,9 +372,10 @@ exports.createFileSystem = function (volume, opts, cb) {
     /* PATH WRAPPERS (albeit the only public interface for some folder operations) */
     
     function _fdOperation(path, opts, fn, cb) { cb = GROUP(cb, function () {
+        opts.advice || (opts.advice = 'NORMAL');
         fs.open(path, opts.flag, function (e,fd) {
             if (e) cb(e);
-            else fn(fd, function () {
+            else fs._fadviseSync(fd, 0, 0, opts.advice), fn(fd, function () {
                 var ctx = this, args = arguments;
                 fs.close(fd, function (closeErr) {
                     cb.apply(ctx, args);
@@ -386,6 +396,7 @@ exports.createFileSystem = function (volume, opts, cb) {
             opts = {};
         }
         opts.flag || (opts.flag = 'r');
+        opts.advice || (opts.advice = 'NOREUSE');
         _fdOperation(path, opts, function (fd, cb) {
             fs.fstat(fd, function (e,stat) {
                 if (e) return cb(e);
@@ -406,6 +417,7 @@ exports.createFileSystem = function (volume, opts, cb) {
             opts = {};
         }
         opts.flag || (opts.flag = 'w');
+        opts.advice || (opts.advice = 'NOREUSE');
         _fdOperation(path, opts, function (fd, cb) {
             if (typeof data === 'string') data = new Buffer(data, opts.encoding || 'utf8');
             fs.write(fd, data, 0, data.length, null, function (e) { cb(e); }, '_nested_');

@@ -78,6 +78,7 @@ exports.init = function (volume, opts, bootSector) {
     // TODO: how should we handle redundant FATs? mirror every write? just ignore completely? copy-on-eject?
     
     var fatChain = c.sectorChain(vol, BS.ResvdSecCnt, FATSz);
+    fatChain.cacheAdvice = 'RANDOM';
     
     vol.fetchFromFAT = function (clusterNum, cb) {
         var info = fatInfoForCluster(clusterNum);
