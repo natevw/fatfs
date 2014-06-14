@@ -35,7 +35,7 @@ exports.wrapDriver = function (volume, opts) {
         sectorSize: volume.sectorSize,
         numSectors: volume.numSectors,
         advice: function (val) {
-            if (!arguments) return adviceSource;
+            if (!arguments.length) return advice;
             else advice = val;
             if (advice === 'SEQUENTIAL' || advice === 'NOREUSE') cache = {};
             return this;

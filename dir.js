@@ -22,14 +22,13 @@ dir.iterator = function (dirChain, opts) {
     
     var secIdx = 0,
         off = {bytes:0},
-        long = null,
-        _chainInfo = dirChain.toJSON();
+        long = null;
     function getNextEntry(cb) {
         if (off.bytes >= dirChain.sectorSize) {
             secIdx += 1;
             off.bytes -= dirChain.sectorSize;
         }
-        var entryPos = {chain:_chainInfo, sector:secIdx, offset:off.bytes};
+        var entryPos = {chain:dirChain, sector:secIdx, offset:off.bytes};
         getSectorBuffer(secIdx, function (e, buf) {
             if (e) return cb(S.err.IO());
             else if (!buf) return cb(null, null, entryPos);
@@ -46,10 +45,7 @@ dir.iterator = function (dirChain, opts) {
             
             var attrByte = buf[entryIdx+S.dirEntry.fields.Attr.offset],
                 entryType = (attrByte === S.longDirFlag) ? S.longDirEntry : S.dirEntry_simple;
-//var t0 = Date.now();
             var entry = entryType.valueFromBytes(buf, off);
-//var t1 = Date.now();
-//console.log(t1-t0, "ms for entry parse");
             entry._pos = entryPos;
             _.log(_.log.DBG, "entry:", entry, secIdx, entryIdx);
             if (entryType === S.longDirEntry) {
@@ -176,8 +172,6 @@ function _updateEntry(vol, entry, newStats) {
 dir.makeStat = function (vol, entry) {
     var stats = {};     // TODO: return an actual `instanceof fs.Stat` somehow?
     
-    entry = _.extend({}, entry);        // copy original so we stay fixed
-    
     stats.isFile = function () {
         return (!entry.Attr.volume_id && !entry.Attr.directory);
     };
@@ -230,8 +224,9 @@ dir.makeStat = function (vol, entry) {
     stats.mtime = extractDate('Wrt');
     stats.ctime = extractDate('Crt');
     
-    // TODO: figure out which mode scheme(s) to support
-    stats.mode;
+    entry = {           // keep immutable copy (with only the fields we need)
+        Attr: _.extend({},entry.Attr),
+    };
     
     return stats;
 };
@@ -336,7 +331,7 @@ dir.addFile = function (vol, dirChain, entryInfo, opts, cb) {
     });
 };
 
-dir._findInDirectory = function (vol, dirChain, name, opts, cb) {
+dir.findInDirectory = function (vol, dirChain, name, opts, cb) {
     var matchName = name.toUpperCase(),
         tailName = (opts.prepareForCreate) ? _.shortname(name) : null,
         maxTail = 0;
@@ -368,7 +363,7 @@ dir._findInDirectory = function (vol, dirChain, name, opts, cb) {
     processNext(dir.iterator(dirChain, {includeFree:(0 && opts.prepareForCreate)}));
 };
 
-dir.entryForPath = function (vol, path, opts, cb) {
+dir.old_entryForPath = function (vol, path, opts, cb) {
     var spets = _.absoluteSteps(path).reverse();
     function findNext(chain) {
         var name = spets.pop();
@@ -377,7 +372,7 @@ dir.entryForPath = function (vol, path, opts, cb) {
             // TODO: *real* fake entry for root directory
             Attr: {directory:true}, FileSize: 0
         }, chain);
-        else dir._findInDirectory(vol, chain, name, opts, function (e,entry) {
+        else dir.findInDirectory(vol, chain, name, opts, function (e,entry) {
             if (e) cb(e, (spets.length) ? null : _.extend(entry, {name:name}), chain);
             else {
                 var _chain = vol.chainForCluster(entry._firstCluster);
@@ -396,10 +391,9 @@ dir.updateEntry = function (vol, entry, newStats, cb) {
     if (!entry._pos || !entry._pos.chain) throw Error("Entry source unknown!");
     
     var entryPos = entry._pos,
-        chain = vol.chainFromJSON(entryPos.chain),          // TODO: fix
         newEntry = _updateEntry(vol, entry, newStats),
         data = S.dirEntry.bytesFromValue(newEntry);
     _.log(_.log.DBG, "UPDATING ENTRY", newStats, newEntry, entryPos, data);
     // TODO: if write fails, then entry becomes corrupt!
-    chain.writeToPosition(entryPos, data, cb);
+    entryPos.chain.writeToPosition(entryPos, data, cb);
 };

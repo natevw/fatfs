@@ -58,27 +58,52 @@ exports.createFileSystem = function (volume, opts, cb) {
         vol = require("./vol.js").init(volume, opts, bootSector);
         fs._dirIterator = dir.iterator.bind(dir);
         
-        var entriesByPath = Object.create(null);
-        fs._registerEntry = function (k, entry, chain) {
-            entry._k = k;
-            entriesByPath[k] = {e:entry, c:chain, s:1};
+        var entryInfoByPath = {},
+            baseEntry = {
+                _refs: 0,
+                _record: function () {
+                    entryInfoByPath[this.path] = this;
+                    if (this.parent) this.parent.retain();
+                    return this;
+                },
+                retain: function () {
+                    if (!this._refs) this._record();
+                    this._refs += 1;
+                    return this;
+                },
+                release: function () {
+                    this._refs -= 1;
+                    if (!this._refs) this._rescind();
+                },
+                _rescind: function () {
+                    if (this.parent) this.parent.release();
+                    delete entryInfoByPath[this.path];
+                }
+            };
+        fs._createSharedEntry = function (path, entry, chain, parent) {
+            return _.extend(Object.create(baseEntry), {
+                path: path,
+                entry: entry,
+                chain: chain,
+                parent: parent
+            }).retain();
         };
-        fs._sharedEntryForPath = function (path, opts, cb) {
-            var k = _.absolutePath(path);
-            if (k in entriesByPath) entriesByPath[k].s += 1, _.delayedCall(cb, null, entriesByPath[k].e, entriesByPath[k].c);
-            else dir.entryForPath(vol, path, opts, function (e, entry, chain) {
-                if (!e) fs._registerEntry(k, entry, chain);
-                cb.apply(this, arguments);
+        fs._createSharedEntry("/", {Attr:{directory:true}}, vol.rootDirectoryChain);
+        fs._sharedEntryForSteps = function (steps, opts, cb) {         // NOTE: may `cb` before returning!
+            var path = steps.join('/') || "/",
+                name = steps.pop(), // n.b.
+                info = entryInfoByPath[path];
+            if (info) cb(null, info.retain());
+            else fs._sharedEntryForSteps(steps, {}, function (e,parentInfo) {  // n.b. `steps` don't include `name`
+                if (e) cb(e);
+                else if (!parentInfo.entry.Attr.directory) cb(S.err.NOTDIR())
+                else dir.findInDirectory(vol, parentInfo.chain, name, opts, function (e,entry) {
+                    if (e && !opts.prepareForCreate) cb(e);
+                    else if (e) cb(e, {missingChild:_.extend(entry, {name:name}), parent:parentInfo});
+                    else cb(null, fs._createSharedEntry(path, entry, vol.chainForCluster(entry._firstCluster), parentInfo));
+                });
             });
-        };
-        fs._releaseEntry = function (entry) {
-            if (!entry._k) throw Error("Can't release entry not obtained via _sharedEntryForPath!");
-            var d = entriesByPath[entry._k];
-            d.s -= 1;
-            setTimeout(function () {
-                if (!d.s) delete entriesByPath[entry._k];
-            });
-        };
+        }
         
         fs._updateEntry = dir.updateEntry.bind(dir, vol);
         fs._makeStat = dir.makeStat.bind(dir, vol);
@@ -105,26 +130,27 @@ exports.createFileSystem = function (volume, opts, cb) {
         if (vol.opts.ro && (f.write || f.create || f.truncate)) return _.delayedCall(cb, S.err.ROFS());
         else _fd.flags = f;
         
-        fs._sharedEntryForPath(path, {prepareForCreate:f.create}, function (e,entry,chain) {
-            if (e && !(e.code === 'NOENT' && f.create && entry)) cb(e);
-            else if (e) fs._addFile(chain, entry, {dir:f._openDir}, function (e,newEntry,newChain) {
+        fs._sharedEntryForSteps(_.absoluteSteps(path), {prepareForCreate:f.create}, function (e,info) {
+            if (e && !(e.code === 'NOENT' && f.create && info)) cb(e);
+            else if (e) fs._addFile(info.parent.chain, info.missingChild, {dir:f._openDir}, function (e,newEntry,newChain) {
                 if (e) cb(e);
-                else fs._registerEntry(_.absolutePath(path), newEntry, newChain), finish(newEntry, newChain);
+                else finish(fs._createSharedEntry(_.absolutePath(path), newEntry, newChain, info.parent));
             });
-            else if (entry && f.exclusive) cb(S.err.EXIST());
-            else if (entry.Attr.directory && !f._openDir) cb(S.err.ISDIR());
-            else if (f.write && entry.Attr.readonly) cb(S.err.ACCES());
-            else finish(entry,chain);
-            function finish(fileEntry,fileChain) {
+            else if (info && f.exclusive) cb(S.err.EXIST());
+            else if (info.entry.Attr.directory && !f._openDir) cb(S.err.ISDIR());
+            else if (f.write && info.entry.Attr.readonly) cb(S.err.ACCES());
+            else finish(info);
+            function finish(fileInfo) {
                 var fd = fileDescriptors.push(_fd)-1;
-                _fd.entry = fileEntry;
-                _fd.chain = fileChain;
+                _fd.info = fileInfo;
+                _fd.entry = fileInfo.entry;
+                _fd.chain = fileInfo.chain;
                 if (f.append) _fd.pos = _fd.entry._size;
                 if (f._openDir) _fd.chain.cacheAdvice = 'WILLNEED';
                 if (f.truncate && _fd.entry._size) fs.ftruncate(fd, 0, function (e) {
                     cb(e, fd);
                 }, '_nested_');
-                else cb(null, fd);
+                else _.delayedCall(cb, null, fd);       // (delay in case fs._sharedEntryForSteps all cached!)
             }
         });
     }, (_n_ === '_nested_')); };
@@ -258,7 +284,7 @@ exports.createFileSystem = function (volume, opts, cb) {
     fs.close = function (fd, cb) {
         var _fd = fileDescriptors[fd];
         if (!_fd) _.delayedCall(cb, S.err.BADF());
-        else fs._releaseEntry(_fd.entry), _.delayedCall(cb, fileDescriptors[fd] = null);
+        else _fd.info.release(), _.delayedCall(cb, fileDescriptors[fd] = null);
     };
     
     

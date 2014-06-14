@@ -153,6 +153,7 @@ exports.init = function (volume, opts, bootSector) {
     vol.rootDirectoryChain = (isFAT16) ?
         c.sectorChain(vol, firstDataSector - rootDirSectors, rootDirSectors) :
         c.clusterChain(vol, BS.RootClus);
+    vol.rootDirectoryChain.cacheAdvice = 'WILLNEED';
     vol.chainForCluster = c.clusterChain.bind(c, vol);
     vol.chainFromJSON = function (d) {
         return ('numSectors' in d) ?
