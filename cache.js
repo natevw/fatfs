@@ -43,11 +43,9 @@ exports.wrapDriver = function (volume, opts) {
         readSectors: function (i, dest, cb) {
             // TODO: handle having partial parts of dest!
             if (i in cache && dest.length === secSize) {
-//console.log("-in cache-", i);
                 cache[i].copy(dest);
                 setImmediate(cb);
             } else volume.readSectors(i, dest, function (e) {
-//console.log("HAD TO READ", i, advice, dest.toString(), Error().stack);
                 if (e) cb(e);
                 else addToCache(i, dest), cb();
             });
