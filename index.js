@@ -284,7 +284,7 @@ exports.createFileSystem = function (volume, opts, cb) {
     fs.close = function (fd, cb) {
         var _fd = fileDescriptors[fd];
         if (!_fd) _.delayedCall(cb, S.err.BADF());
-        else _fd.info.release(), _.delayedCall(cb, fileDescriptors[fd] = null);
+        else setTimeout(_fd.info.release.bind(_fd.info), 500), _.delayedCall(cb, fileDescriptors[fd] = null);
     };
     
     
