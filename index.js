@@ -82,6 +82,7 @@ exports.createFileSystem = function (volume, opts, cb) {
             };
         fs._createSharedEntry = function (path, entry, chain, parent) {
             return _.extend(Object.create(baseEntry), {
+                _refs: 0,           // WORKAROUND: https://github.com/tessel/beta/issues/455
                 path: path,
                 entry: entry,
                 chain: chain,
