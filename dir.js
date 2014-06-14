@@ -363,30 +363,6 @@ dir.findInDirectory = function (vol, dirChain, name, opts, cb) {
     processNext(dir.iterator(dirChain, {includeFree:(0 && opts.prepareForCreate)}));
 };
 
-dir.old_entryForPath = function (vol, path, opts, cb) {
-    var spets = _.absoluteSteps(path).reverse();
-    function findNext(chain) {
-        var name = spets.pop();
-        _.log(_.log.DBG, "Looking in", chain.toJSON(), "for", JSON.stringify(name));
-        if (!name) cb(null, {
-            // TODO: *real* fake entry for root directory
-            Attr: {directory:true}, FileSize: 0
-        }, chain);
-        else dir.findInDirectory(vol, chain, name, opts, function (e,entry) {
-            if (e) cb(e, (spets.length) ? null : _.extend(entry, {name:name}), chain);
-            else {
-                var _chain = vol.chainForCluster(entry._firstCluster);
-                if (spets.length) {
-                    if (entry.Attr.directory) findNext(_chain);
-                    else cb(S.err.NOTDIR());
-                }
-                else cb(null, entry, _chain);
-            }
-        });
-    }
-    findNext(vol.rootDirectoryChain);
-};
-
 dir.updateEntry = function (vol, entry, newStats, cb) {
     if (!entry._pos || !entry._pos.chain) throw Error("Entry source unknown!");
     
