@@ -22,6 +22,7 @@ function _baseChain(vol) {
     chain._vol_readSectors = vol._readSectors.bind(vol, sectorCache);
     chain._vol_writeSectors = vol._writeSectors.bind(vol, sectorCache);
     
+    // cb(error, bytesRead, buffer)
     chain.readFromPosition = function (targetPos, buffer, cb) {
         if (typeof targetPos === 'number') targetPos = posFromOffset(targetPos);
         if (typeof buffer === 'number') buffer = new Buffer(buffer);
@@ -61,34 +62,41 @@ function _baseChain(vol) {
         }
     };
     
-    // TODO: use bulk writes whenever possible!
+    // cb(error)
     chain.writeToPosition = function (targetPos, data, cb) {
         _.log(_.log.DBG, "WRITING", data.length, "bytes at", targetPos, "in", this.toJSON(), data);
         if (typeof targetPos === 'number') targetPos = posFromOffset(targetPos);
-        function _writeToChain(sec, off, data) {
-            var incomplete = (off || data.length < chain.sectorSize);
-            if (incomplete) chain.readSectors(sec, Buffer(chain.sectorSize), function (e, orig) {
+        
+        var prefaceBuffer = (targetPos.offset) ? data.slice(0, chain.sectorSize-targetPos.offset) : null;
+        if (prefaceBuffer) _modifySector(targetPos.sector, targetPos.offset, prefaceBuffer, function (e) {
+            if (e) cb(e);
+            else if (prefaceBuffer.length < data.length) writeMain();
+            else cb();
+        }); else writeMain();
+        function writeMain() {
+            var prefaceLen = targetPos.offset,
+                trailerLen = (data.length - prefaceLen) % chain.sectorSize,
+                mainSector = (prefaceLen) ? targetPos.sector + 1 : targetPos.sector,
+                mainBuffer = (trailerLen) ? data.slice(prefaceLen, -trailerLen) : data.slice(prefaceLen);
+            if (mainBuffer.length) chain.writeSectors(mainSector, mainBuffer, function (e) {
+                if (e) cb(e);
+                else if (!trailerLen) cb();
+                else writeTrailer();
+            }); else writeTrailer();
+            function writeTrailer() {
+                var trailerSector = mainSector + (mainBuffer.length / chain.sectorSize),
+                    trailerBuffer = data.slice(-trailerLen);
+                _modifySector(trailerSector, 0, trailerBuffer, cb);
+            }
+        }
+        function _modifySector(sec, off, data, cb) {
+            chain.readSectors(sec, Buffer(chain.sectorSize), function (e, orig) {
                 if (e) return cb(e);
-                else if (!orig) {
-                    orig = new Buffer(chain.sectorSize);
-                    orig.fill(0);
-                }
+                orig || (orig = _.filledBuffer(chain.sectorSize, 0));
                 data.copy(orig, off);
-                data = data.slice(chain.sectorSize - off);
-                chain.writeSectors(sec, orig, function (e) {
-                    if (e) cb(e);
-                    else if (data.length) _writeToChain(sec+1, 0, data);
-                    else cb(null);
-                });
-            }); else chain.writeSectors(sec, data.slice(0, chain.sectorSize), function (e) {
-                if (e) return cb(e);
-                
-                data = data.slice(chain.sectorSize);
-                if (data.length) _writeToChain(sec+1, 0, data);
-                else cb(null);
+                chain.writeSectors(sec, orig, cb);
             });
         }
-        _writeToChain(targetPos.sector, targetPos.offset, data);
     };
     
     return chain;
@@ -155,20 +163,6 @@ exports.clusterChain = function (vol, firstCluster, _parent) {
         else removeClusters(cache.length - 1, cb);
     }
     
-    function firstSectorOfClusterAtIdx(i, alloc, cb) {
-        extendCacheToInclude(i, function (e,c) {
-            if (e) cb(e);
-            else if (c === 'eof') {
-                if (alloc) expandChainToLength(i+1, function (e) {
-                    if (e) cb(e);
-                    else firstSectorOfClusterAtIdx(i, false, cb);
-                });
-                else cb(null, -1);
-            }
-            else cb(null, vol._firstSectorOfCluster(c));
-        });
-    }
-    
     // [{firstSector,numSectors},{firstSector,numSectors},…]
     function determineSectorGroups(sectorIdx, numSectors, alloc, cb) {
         var sectorOffset = sectorIdx % vol._sectorsPerCluster,
@@ -214,7 +208,7 @@ exports.clusterChain = function (vol, firstCluster, _parent) {
         determineSectorGroups(i, dest.length / chain.sectorSize, false, function (e, groups, complete) {
             if (e) cb(e);
             else if (!complete) groupsPending = -1, _pastEOF(cb);
-            else groupsPending = groups.length, groups.forEach(function (group) {
+            else if ((groupsPending = groups.length)) groups.forEach(function (group) {
                 var groupLength = group.numSectors * chain.sectorSize,
                     groupBuffer = dest.slice(groupOffset, groupOffset += groupLength);
                 chain._vol_readSectors(group.firstSector, groupBuffer, function (e,d) {
@@ -222,22 +216,24 @@ exports.clusterChain = function (vol, firstCluster, _parent) {
                     else if (--groupsPending === 0) cb(null, dest);
                 });
             });
-            if (!groupsPending) cb(null, dest);     // 0-length destination case
+            else cb(null, dest);     // 0-length destination case
         });
     };
     
     // TODO: does this handle NOSPC condition?
     chain.writeSectors = function (i, data, cb) {
-        var o = i % vol._sectorsPerCluster,
-            c = (i - o) / vol._sectorsPerCluster;
-        if (data.length > vol._sectorSize * vol._sectorsPerCluster) {
-            // TODO: figure out which contiguous chunks need writing
-            throw S.err._TODO();
-        }
-        firstSectorOfClusterAtIdx(c, true, function (e,s) {
+        var groupOffset = 0, groupsPending;
+        determineSectorGroups(i, data.length / chain.sectorSize, true, function (e, groups) {
             if (e) cb(e);
-            else if (s < 0) cb(S.err.IO());
-            else chain._vol_writeSectors(s+o, data, cb);
+            else if ((groupsPending = groups.length)) groups.forEach(function (group) {
+                var groupLength = group.numSectors * chain.sectorSize,
+                    groupBuffer = data.slice(groupOffset, groupOffset += groupLength);
+                chain._vol_writeSectors(group.firstSector, groupBuffer, function (e) {
+                    if (e && groupsPending !== -1) groupsPending = -1, cb(e);
+                    else if (--groupsPending === 0) cb();
+                });
+            });
+            else cb();     // 0-length data case
         });
     };
     
