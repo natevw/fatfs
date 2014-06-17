@@ -233,7 +233,7 @@ dir.makeStat = function (vol, entry) {
 
 dir.init = function (vol, dirInfo, cb) {
     var dirChain = dirInfo.chain,
-        isRootDir = ('numSectors' in dirChain.toJSON()),    // HACK: all others would be a clusterChain
+        isRootDir = ('numSectors' in dirChain),    // HACK: all others would be a clusterChain
         initialCluster = Buffer(dirChain.sectorSize*vol._sectorsPerCluster),
         entriesOffset = {bytes:0};
     initialCluster.fill(0);
@@ -245,8 +245,8 @@ dir.init = function (vol, dirInfo, cb) {
         }, {firstCluster:clusterNum, _touch:true,ctime:true}), initialCluster, entriesOffset);
     }
     if (!isRootDir) {
-        writeEntry(".", dirChain.toJSON().firstCluster);
-        writeEntry("..", dirInfo.parent.chain.toJSON().firstCluster);
+        writeEntry(".", dirChain.firstCluster);
+        writeEntry("..", dirInfo.parent.chain.firstCluster);
     };
     dirChain.writeToPosition(0, initialCluster, cb);
 };
@@ -302,7 +302,7 @@ dir.addFile = function (vol, dirChain, entryInfo, opts, cb) {
         _.log(_.log.DBG, "Shortname amended to:", mainEntry.Name);
     }
     
-    vol.allocateInFAT(dirChain.toJSON().firstCluster || 2, function (e,fileCluster) {
+    vol.allocateInFAT(dirChain.firstCluster || 2, function (e,fileCluster) {
         if (e) return cb(e);
         
         var nameBuf = S.dirEntry.fields['Name'].bytesFromValue(mainEntry.Name),

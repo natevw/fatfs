@@ -108,6 +108,8 @@ exports.clusterChain = function (vol, firstCluster, _parent) {
     var chain = _baseChain(vol),
         cache = [firstCluster];
     
+    chain.firstCluster = firstCluster;
+    
     function _cacheIsComplete() {
         return cache[cache.length-1] === 'eof';
     }
@@ -256,6 +258,9 @@ exports.clusterChain = function (vol, firstCluster, _parent) {
 
 exports.sectorChain = function (vol, firstSector, numSectors) {
     var chain = _baseChain(vol);
+    
+    chain.firstSector = firstSector;
+    chain.numSectors = numSectors;
     
     chain.readSectors = function (i, dest, cb) {
         if (i < numSectors) chain._vol_readSectors(firstSector+i, dest, cb);
