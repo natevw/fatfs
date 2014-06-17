@@ -59,7 +59,7 @@ exports.init = function (volume, opts, bootSector) {
     };
     
     vol._writeSectors = function (cache, secNum, data, cb) {
-        _.log(_.log.DBG, "vol._writeSector", secNum, data.length);
+        _.log(_.log.DBG, "vol._writeSectors", secNum, data.length);
         // NOTE: these are internal assertions, public API will get proper `S.err`s
         if (data.length % volume.sectorSize) throw Error("Buffer length not a multiple of sector size");
         else if (opts.ro) throw Error("Read-only filesystem");
