@@ -108,9 +108,6 @@ exports.clusterChain = function (vol, firstCluster, _parent) {
     var chain = _baseChain(vol),
         cache = [firstCluster];
     
-    // ~HACK: needed by `dir.init` for ".." entry…
-    if (_parent) chain._parentChain = _parent;
-    
     function _cacheIsComplete() {
         return cache[cache.length-1] === 'eof';
     }

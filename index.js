@@ -222,7 +222,7 @@ exports.createFileSystem = function (volume, opts, cb) {
     fs._mkdir = function (fd, cb, _n_) { cb = GROUP(cb, function () {
         var _fd = fileDescriptors[fd];
         if (!_fd || !_fd.flags.write) _.delayedCall(cb, S.err.BADF());
-        else fs._initDir(_fd.chain, cb);
+        else fs._initDir(_fd.info, cb);
     }, (_n_ === '_nested_')); };
     
     fs.write = function (fd, buf, off, len, pos, cb, _n_) { cb = GROUP(cb, function () {

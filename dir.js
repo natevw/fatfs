@@ -231,8 +231,9 @@ dir.makeStat = function (vol, entry) {
     return stats;
 };
 
-dir.init = function (vol, dirChain, cb) {
-    var isRootDir = ('numSectors' in dirChain.toJSON()),    // HACK: all others would be a clusterChain
+dir.init = function (vol, dirInfo, cb) {
+    var dirChain = dirInfo.chain,
+        isRootDir = ('numSectors' in dirChain.toJSON()),    // HACK: all others would be a clusterChain
         initialCluster = Buffer(dirChain.sectorSize*vol._sectorsPerCluster),
         entriesOffset = {bytes:0};
     initialCluster.fill(0);
@@ -245,7 +246,7 @@ dir.init = function (vol, dirChain, cb) {
     }
     if (!isRootDir) {
         writeEntry(".", dirChain.toJSON().firstCluster);
-        writeEntry("..", dirChain._parentChain.toJSON().firstCluster);
+        writeEntry("..", dirInfo.parent.chain.toJSON().firstCluster);
     };
     dirChain.writeToPosition(0, initialCluster, cb);
 };
