@@ -421,6 +421,12 @@ exports.createFileSystem = function (volume, opts, cb) {
         }, cb);
     };
     
+    fs.exists = function(path, cb){
+      fs.stat(path, function(err){
+         cb(err ? false : true);
+      });  
+    };
+    
     fs.readFile = function (path, opts, cb) {
         if (typeof opts === 'function') {
             cb = opts;
