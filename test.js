@@ -42,7 +42,7 @@ function startTests(vol, waitTime) {
         'chown','lchown','fchown',
         'chmod','lchmod', 'fchmod',
         'utimes','futimes',
-        'stat','lstat','fstat',
+        'stat','lstat','fstat','exists',
         'link','symlink','readlink','realpath',
         
         //'watchFile','unwatchFile','watch'
@@ -101,6 +101,9 @@ function startTests(vol, waitTime) {
                     assert(d.isFile() === true, "Result is a file…");
                     assert(d.isDirectory() === false, "…and not a directory.");
                     assert(d.size === Buffer.byteLength(TEXTDATA), "Size matches length of content written.");
+                });
+                fs.exists(file, function (bool) {
+                  assert(bool === true, "File exists.");
                 });
                 fs.readFile(file, {encoding:'utf8'}, function (e, d) {
                     assert(!e, "No error from fs.readFile");

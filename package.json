@@ -1,6 +1,6 @@
 {
   "name": "fatfs",
-  "version": "0.10.0",
+  "version": "0.10.1",
   "description": "fs implementation on top of raw FAT16/FAT32 block source",
   "main": "index.js",
   "scripts": {
