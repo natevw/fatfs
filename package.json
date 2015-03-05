@@ -1,6 +1,6 @@
 {
   "name": "fatfs",
-  "version": "0.10.1",
+  "version": "0.10.2",
   "description": "fs implementation on top of raw FAT16/FAT32 block source",
   "main": "index.js",
   "scripts": {
@@ -24,7 +24,7 @@
   },
   "homepage": "https://github.com/natevw/fatfs",
   "dependencies": {
-    "struct-fu": "^0.9.1",
+    "struct-fu": "^1.0.0",
     "fifolock": "^1.0.0",
     "xok": "^1.0.0"
   }
