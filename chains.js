@@ -85,7 +85,7 @@ function _baseChain(vol) {
             }); else writeTrailer();
             function writeTrailer() {
                 var trailerSector = mainSector + (mainBuffer.length / chain.sectorSize),
-                    trailerBuffer = data.slice(-trailerLen);
+                    trailerBuffer = data.slice(data.length-trailerLen);     // WORKAROUND: https://github.com/tessel/runtime/issues/721
                 _modifySector(trailerSector, 0, trailerBuffer, cb);
             }
         }

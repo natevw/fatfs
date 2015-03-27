@@ -296,7 +296,7 @@ function startTests(vol, waitTime) {
                 inStream.on('data', function (d) {
                     gotData = true;
                     assert(typeof d === 'string', "Data returned as string.");
-                    assert(d.slice(-TEXTDATA.length) === TEXTDATA, "End of file matches what was written.");
+                    assert(d.slice(d.length-TEXTDATA.length) === TEXTDATA, "End of file matches what was written.");
                 });
                 inStream.on('end', function () {
                     gotEOF = true;
