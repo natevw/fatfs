@@ -268,26 +268,25 @@ dir.addFile = function (vol, dirChain, entryInfo, opts, cb) {
         var workaroundTessel427 = ('\uFFFF'.length !== 1);
         var S_lde_f = S.longDirEntry.fields,
             ENTRY_CHUNK_LEN = (S_lde_f.Name1.size + S_lde_f.Name2.size + S_lde_f.Name3.size)/2,
-            paddedName = (workaroundTessel427) ? require('struct-fu/8to16').fixString(name) : name,
-            partialLen = paddedName.length % ENTRY_CHUNK_LEN,
+            partialLen = name.length % ENTRY_CHUNK_LEN,
             paddingNeeded = partialLen && (ENTRY_CHUNK_LEN - partialLen);
         if (workaroundTessel427) {
-            if (paddingNeeded--) paddedName.push(0);
-            while (paddingNeeded-- > 0) paddedName.push(0xFFFF);
+            if (paddingNeeded--) name.push(0);
+            while (paddingNeeded-- > 0) name.push(0xFFFF);
         } else {
-            if (paddingNeeded--) paddedName += '\u0000';
-            while (paddingNeeded-- > 0) paddedName += '\uFFFF';
+            if (paddingNeeded--) name += '\u0000';
+            while (paddingNeeded-- > 0) name += '\uFFFF';
         }
         // now fill in as many entries as it takes
         var off = 0,
             ord = 1;
-        while (off < paddedName.length) entries.push({
+        while (off < name.length) entries.push({
             Ord: ord++,
-            Name1: paddedName.slice(off, off+=S_lde_f.Name1.size/2),
+            Name1: name.slice(off, off+=S_lde_f.Name1.size/2),
             Attr_raw: S.longDirFlag,
             Chksum: null,
-            Name2: paddedName.slice(off, off+=S_lde_f.Name2.size/2),
-            Name3: paddedName.slice(off, off+=S_lde_f.Name3.size/2)
+            Name2: name.slice(off, off+=S_lde_f.Name2.size/2),
+            Name3: name.slice(off, off+=S_lde_f.Name3.size/2)
         });
         entries[entries.length - 1].Ord |= S.lastLongFlag;
     }
