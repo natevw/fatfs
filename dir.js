@@ -265,18 +265,12 @@ dir.addFile = function (vol, dirChain, entryInfo, opts, cb) {
     });
     if (1 || mainEntry.Name._lossy) {         // HACK: always write long names until `._lossy` is more useful!
         // name entries should be 0x0000-terminated and 0xFFFF-filled
-        var workaroundTessel427 = ('\uFFFF'.length !== 1);
         var S_lde_f = S.longDirEntry.fields,
             ENTRY_CHUNK_LEN = (S_lde_f.Name1.size + S_lde_f.Name2.size + S_lde_f.Name3.size)/2,
             partialLen = name.length % ENTRY_CHUNK_LEN,
             paddingNeeded = partialLen && (ENTRY_CHUNK_LEN - partialLen);
-        if (workaroundTessel427) {
-            if (paddingNeeded--) name.push(0);
-            while (paddingNeeded-- > 0) name.push(0xFFFF);
-        } else {
-            if (paddingNeeded--) name += '\u0000';
-            while (paddingNeeded-- > 0) name += '\uFFFF';
-        }
+        if (paddingNeeded--) name += '\u0000';
+        while (paddingNeeded-- > 0) name += '\uFFFF';
         // now fill in as many entries as it takes
         var off = 0,
             ord = 1;
