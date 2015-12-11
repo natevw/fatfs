@@ -264,6 +264,9 @@ dir.addFile = function (vol, dirChain, entryInfo, opts, cb) {
         _name: name
     });
     if (1 || mainEntry.Name._lossy) {         // HACK: always write long names until `._lossy` is more useful!
+        var workaroundTessel427 = ('\uFFFF'.length !== 1);
+        if (workaroundTessel427) throw Error("Your JS runtime does not have proper Unicode string support. (If Tessel, is your firmware up-to-date?)");
+        
         // name entries should be 0x0000-terminated and 0xFFFF-filled
         var S_lde_f = S.longDirEntry.fields,
             ENTRY_CHUNK_LEN = (S_lde_f.Name1.size + S_lde_f.Name2.size + S_lde_f.Name3.size)/2,
