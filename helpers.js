@@ -165,7 +165,7 @@ exports.adjustedPos = function (vol, pos, bytes) {
         sector: pos.sector,
         offset: pos.offset + bytes
     }, secSize = vol._sectorSize;
-    while (_pos.offset > secSize) {
+    while (_pos.offset >= secSize) {
         _pos.sector += 1;
         _pos.offset -= secSize;
     }
