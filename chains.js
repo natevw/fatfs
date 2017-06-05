@@ -74,7 +74,7 @@ function _baseChain(vol) {
             else cb();
         }); else writeMain();
         function writeMain() {
-            var prefaceLen = targetPos.offset,
+            var prefaceLen = (prefaceBuffer) ? prefaceBuffer.length : 0,
                 trailerLen = (data.length - prefaceLen) % chain.sectorSize,
                 mainSector = (prefaceLen) ? targetPos.sector + 1 : targetPos.sector,
                 mainBuffer = (trailerLen) ? data.slice(prefaceLen, -trailerLen) : data.slice(prefaceLen);
