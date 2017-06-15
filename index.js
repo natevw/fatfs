@@ -45,7 +45,13 @@ exports.createFileSystem = function (volume, opts, cb) {
         volume.readSectors(0, d, function (e) {
             if (e) fs.emit('error', e);
             else {
-                init(d);
+                try {
+                    init(d);
+                } catch (e) {
+                    fs.emit('error', e);
+                    unlock();
+                    return;
+                }
                 fs.emit('ready');
             }
             unlock();
