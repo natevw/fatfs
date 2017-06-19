@@ -54,7 +54,7 @@ Well, sort of…
 
 Some of the differences between `fatfs` and the node.js `fs` module are "by design" for architectural simplicity and/or due to underlying FAT limitations.
 
-* There are no `fs.*Sync` methods.
+* There are no `fs.*Sync` methods. (The volume driver is async, not to mention that supporting a separate \*Sync codepath would be an enormous duplication of effort of dubious value.)
 * This module does [almost] no read/write caching. This should be done in your volume driver, but see notes below.
 * You'll need multiple `createFileSystem` instances for multiple volumes; paths are relative to each, and don't share a namespace.
 * The FAT filesystem has no concept of symlinks, and hardlinks are not really an intentional feature. You will get an ENOSYS-like error when trying to create either type of link.
