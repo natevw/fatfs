@@ -40,7 +40,7 @@ function _baseChain(vol) {
             }
         }); else readMain();
         function readMain() {
-            var prefaceLen = targetPos.offset,
+            var prefaceLen = targetPos.offset && (chain.sectorSize - targetPos.offset),
                 trailerLen = (buffer.length - prefaceLen) % chain.sectorSize,
                 mainSector = (prefaceLen) ? targetPos.sector + 1 : targetPos.sector,
                 mainBuffer = (trailerLen) ? buffer.slice(prefaceLen, -trailerLen) : buffer.slice(prefaceLen);
