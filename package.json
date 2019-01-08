@@ -24,8 +24,8 @@
   },
   "homepage": "https://github.com/natevw/fatfs",
   "dependencies": {
-    "struct-fu": "^1.0.0",
     "fifolock": "^1.0.0",
+    "struct-fu": "^1.2.1",
     "xok": "^1.0.0"
   }
 }
