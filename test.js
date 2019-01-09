@@ -1,5 +1,7 @@
 // can be called from CLI with image type, absolute path to an image, or, required as a module
 
+var _ = require("./helpers.js");
+
 var type = process.argv[2];
 if (module.parent) exports.startTests = startTests;
 else if (!type) throw "Usage: node test [FAT12|FAT16|FAT32|ExFAT|…|/path/to/image]";
@@ -110,7 +112,7 @@ function startTests(vol, waitTime) {
                     assert(d === TEXTDATA, "Data matches what was written.");
                 });
                 // now, overwrite the same file and make sure that goes well too
-                fs.writeFile(file, Buffer([0x42]), function (e) {
+                fs.writeFile(file, _.bufferFrom([0x42]), function (e) {
                     assert(!e, "Still no error from fs.writeFile");
                     fs.readdir(BASE_DIR, function (e, arr) {
                         assert(!e, "No error from fs.readdir");
@@ -169,7 +171,7 @@ function startTests(vol, waitTime) {
             fs.appendFile(file, str, function (e) {
                 assert(!e, "No error from fs.appendFile.");
                 assert(fd, "File descriptor opened before appendFile called.");
-                var buf = new Buffer(str.length);
+                var buf = _.allocBuffer(str.length);
                 fs.read(fd, buf, 0, buf.length, was.length, function (e,n,d) {
                     assert(!e, "No error from fs.read after append.");
                     assert(n === str.length, "All appended data was readable.");
@@ -185,7 +187,7 @@ function startTests(vol, waitTime) {
                 fs.open(file, 'a', function (e, fd2) {
                     assert(!e, "No error from second open of file.");
                     var str2 = "zyx",
-                        buf2 = Buffer(str2.length+2);
+                        buf2 = _.allocBuffer(str2.length+2);
                     buf2.write(str2, 1);
                     fs.write(fd2, buf2, 1, buf2.length-2, was.length, function (e,n,d) {
                         assert(!e, "No error from appending fs.write.");
@@ -207,7 +209,7 @@ function startTests(vol, waitTime) {
             var F = [BASE_DIR,"Manually inspect from time to time, please!.txt"].join('/'),
                 S = 512,
                 N = 16,
-                b = new Buffer(S*N);
+                b = _.allocBuffer(S*N);
             for (var i = 0; i < N; ++i) b.slice(S*i, S*i+S).fill(i.toString(16).charCodeAt(0));
             fs.writeFile(F, b, function (e) {
                 assert(!e, "No error from fs.writeFile with counting blocks.");
@@ -302,7 +304,7 @@ function startTests(vol, waitTime) {
                     gotEOF = true;
                     
                     var len = Buffer.byteLength(TEXT_MOD, 'utf16le'),
-                        buf = new Buffer(len);
+                        buf = _.allocBuffer(len);
                     fs.fsync(inStreamFD, function (e) {
                         assert(!e, "No error from proper fsync.");
                     });
