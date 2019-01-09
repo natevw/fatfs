@@ -51,7 +51,7 @@ exports.init = function (volume, opts, bootSector) {
     vol._readSectors = function (cache, secNum, dest, cb) {
         if (typeof dest === 'function') {
             cb = dest;
-            dest = new Buffer(vol._sectorSize);
+            dest = _.allocBuffer(vol._sectorSize);
         }
         _.log(_.log.DBG, "vol._readSectors", secNum, dest.length);
         if (secNum < volume.numSectors) cache.readSectors(secNum, dest, function (e) { cb(e, dest); });

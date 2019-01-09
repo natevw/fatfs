@@ -10,7 +10,7 @@ exports.wrapDriver = function (volume, opts) {
         secSize = volume.sectorSize;
     
     function _freezeBuffer(b) {
-        var f = new Buffer(b.length);
+        var f = _.allocBuffer(b.length);
         b.copy(f);
         return f;
     }

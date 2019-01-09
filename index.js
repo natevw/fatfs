@@ -41,7 +41,7 @@ exports.createFileSystem = function (volume, opts, cb) {
     }) : q.TRANSACTION_WRAPPER;
     
     q.acquire(function (unlock) {         // because of this, callers can start before 'ready'
-        var d = new Buffer(volume.sectorSize);
+        var d = _.allocBuffer(volume.sectorSize);
         volume.readSectors(0, d, function (e) {
             if (e) fs.emit('error', e);
             else {
@@ -240,7 +240,7 @@ exports.createFileSystem = function (volume, opts, cb) {
         if (_pos > _fd.entry._size) {
             // TODO: handle huge jumps by zeroing clusters individually?
             var padLen = _pos - _fd.entry._size,
-                padBuf = new Buffer(padLen + _buf.length);
+                padBuf = _.allocBuffer(padLen + _buf.length);
             padBuf.fill(0x00, 0, padLen);
             _buf.copy(padBuf, padLen);
             _pos = _fd.entry._size;
@@ -267,7 +267,7 @@ exports.createFileSystem = function (volume, opts, cb) {
             if (e) cb(e);
             else _fd.chain.truncate(Math.ceil(len / _fd.chain.sectorSize), cb);
         });     // TODO: handle huge file expansions without as much memory pressure
-        else _fd.chain.writeToPosition(_fd.entry._size, _.filledBuffer(len-_fd.entry._size, 0x00), function (e) {
+        else _fd.chain.writeToPosition(_fd.entry._size, _.allocBuffer(len-_fd.entry._size, 0x00), function (e) {
             if (e) cb(e);
             else fs._updateEntry(_fd.entry, newStats, cb);
         });
@@ -343,7 +343,7 @@ exports.createFileSystem = function (volume, opts, cb) {
                 n = Math.min(n, opts.end-pos);
                 if (fd === '_opening_') stream.once('open', function () { stream._read(n); });
                 else if (pos > opts.end) stream.push(null);
-                else if (n > 0) buf = new Buffer(n), fs.read(fd, buf, 0, n, pos, function (e,n,d) {
+                else if (n > 0) buf = _.allocBuffer(n), fs.read(fd, buf, 0, n, pos, function (e,n,d) {
                     if (e) {
                         autoClose('_read_error_');
                         stream.emit('error', e);
@@ -444,7 +444,7 @@ exports.createFileSystem = function (volume, opts, cb) {
             fs.fstat(fd, function (e,stat) {
                 if (e) return cb(e);
                 else {
-                    var buffer = new Buffer(stat.size);
+                    var buffer = _.allocBuffer(stat.size);
                     fs.read(fd, buffer, 0, buffer.length, null, function (e) {
                         if (e) cb(e);
                         else cb(null, (opts.encoding) ? buffer.toString(opts.encoding) : buffer);
@@ -462,7 +462,7 @@ exports.createFileSystem = function (volume, opts, cb) {
         opts.flag || (opts.flag = 'w');
         opts.advice || (opts.advice = 'NOREUSE');
         _fdOperation(path, opts, function (fd, cb) {
-            if (typeof data === 'string') data = new Buffer(data, opts.encoding || 'utf8');
+            if (typeof data === 'string') data = _.bufferFrom(data, opts.encoding || 'utf8');
             fs.write(fd, data, 0, data.length, null, function (e) { cb(e); }, '_nested_');
         }, cb);
     };

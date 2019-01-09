@@ -25,11 +25,11 @@ function _baseChain(vol) {
     // cb(error, bytesRead, buffer)
     chain.readFromPosition = function (targetPos, buffer, cb) {
         if (typeof targetPos === 'number') targetPos = posFromOffset(targetPos);
-        if (typeof buffer === 'number') buffer = new Buffer(buffer);
+        if (typeof buffer === 'number') buffer = _.allocBuffer(buffer);
         /* NOTE: to keep our contract with the volume driver, we need to read on _full_ sector boundaries!
                  So we divide the read into [up to] three parts: {preface, main, trailer}
                  This is kind of unfortunate, but in practice should often still be reasonably efficient. */
-        if (targetPos.offset) chain.readSectors(targetPos.sector, Buffer(chain.sectorSize), function (e,d) {
+        if (targetPos.offset) chain.readSectors(targetPos.sector, _.allocBuffer(chain.sectorSize), function (e,d) {
             if (e || !d) cb(e, 0, buffer);
             else {  // copy preface into `buffer`
                 var dBeg = targetPos.offset,
@@ -51,7 +51,7 @@ function _baseChain(vol) {
             }); else readTrailer();
             function readTrailer() {
                 var trailerSector = mainSector + (mainBuffer.length / chain.sectorSize);
-                chain.readSectors(trailerSector, Buffer(chain.sectorSize), function (e,d) {
+                chain.readSectors(trailerSector, _.allocBuffer(chain.sectorSize), function (e,d) {
                     if (e || !d) cb(e, buffer.length-trailerLen, buffer);
                     else {
                         d.copy(buffer, buffer.length-trailerLen, 0, trailerLen);
@@ -90,9 +90,9 @@ function _baseChain(vol) {
             }
         }
         function _modifySector(sec, off, data, cb) {
-            chain.readSectors(sec, Buffer(chain.sectorSize), function (e, orig) {
+            chain.readSectors(sec, _.allocBuffer(chain.sectorSize), function (e, orig) {
                 if (e) return cb(e);
-                orig || (orig = _.filledBuffer(chain.sectorSize, 0));
+                orig || (orig = _.allocBuffer(chain.sectorSize, 0));
                 data.copy(orig, off);
                 chain.writeSectors(sec, orig, cb);
             });

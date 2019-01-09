@@ -1,8 +1,18 @@
 var S = require("./structs.js"),
     _xok = require('xok');
 
+// ponyfills for older node.js
+exports.allocBuffer = Buffer.alloc || function (len, val) {
+    var b = Buffer(len);
+    if (arguments.length > 1) b.fill(val);
+    return b;
+};
+exports.bufferFrom = Buffer.from || function (arg0, arg1) {
+    return (arguments.length > 1) ? Buffer(arg0, arg1) : Buffer(arg0);
+};
+
 // flag for WORKAROUND: https://github.com/tessel/beta/issues/380
-exports.workaroundTessel380 = function () {
+exports.workaroundTessel380 = !Buffer.from && function () {
     var b = Buffer([0]),
         s = b.slice(0);
     return ((s[0] = 0xFF) !== b[0]);
@@ -11,7 +21,7 @@ exports.workaroundTessel380 = function () {
 
 // WORKAROUND: https://github.com/tessel/beta/issues/433
 var oldslice;
-if (Buffer(5).slice(10).length < 0) oldslice = Buffer.prototype.slice, Buffer.prototype.slice = function (s, e) {
+if (!Buffer.alloc && Buffer(5).slice(10).length < 0) oldslice = Buffer.prototype.slice, Buffer.prototype.slice = function (s, e) {
     if (s > this.length) s = this.length;
     // ~WORKAROUND: https://github.com/tessel/beta/issues/434
     return (arguments.length > 1) ? oldslice.call(this, s, e) : oldslice.call(this, s);
@@ -173,12 +183,6 @@ exports.adjustedPos = function (vol, pos, bytes) {
 };
 
 exports.extend = _xok;
-
-exports.filledBuffer = function (len, val) {
-    var b = new Buffer(len);
-    b.fill(val);
-    return b;
-};
 
 var _prevDbg = Date.now(),
     _thresh = 50;

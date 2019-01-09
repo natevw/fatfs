@@ -9,7 +9,7 @@ dir.iterator = function (dirChain, opts) {
     var cache = {buffer:null, n: null};
     function getSectorBuffer(n, cb) {
         if (cache.n === n) cb(null, cache.buffer);
-        else cache.n = cache.buffer = null, dirChain.readSectors(n, Buffer(dirChain.sectorSize), function (e,d) {
+        else cache.n = cache.buffer = null, dirChain.readSectors(n, _.allocBuffer(dirChain.sectorSize), function (e,d) {
             if (e) cb(e);
             else if (!d) return cb(null, null);
             else {
@@ -234,7 +234,7 @@ dir.makeStat = function (vol, entry) {
 dir.init = function (vol, dirInfo, cb) {
     var dirChain = dirInfo.chain,
         isRootDir = ('numSectors' in dirChain),    // HACK: all others would be a clusterChain
-        initialCluster = Buffer(dirChain.sectorSize*vol._sectorsPerCluster),
+        initialCluster = _.allocBuffer(dirChain.sectorSize*vol._sectorsPerCluster),
         entriesOffset = {bytes:0};
     initialCluster.fill(0);
     function writeEntry(name, clusterNum) {
@@ -312,7 +312,7 @@ dir.addFile = function (vol, dirChain, entryInfo, opts, cb) {
         entries.reverse();
         if (entryInfo.lastEntry) entries.push({});
         
-        var entriesData = new Buffer(S.dirEntry.size*entries.length),
+        var entriesData = _.allocBuffer(S.dirEntry.size*entries.length),
             dataOffset = {bytes:0};
         entries.forEach(function (entry) {
             var entryType = ('Ord' in entry) ? S.longDirEntry : S.dirEntry;

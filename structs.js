@@ -1,7 +1,8 @@
 // see http://staff.washington.edu/dittrich/misc/fatgen103.pdf
 // and http://www.cse.scu.edu/~tschwarz/COEN252_09/Lectures/FAT.html
 
-var _ = require('struct-fu');
+var _ = require('struct-fu'),
+    __ = require("./helpers.js");
 
 var bootBase = _.struct([
     _.byte('jmpBoot', 3),
@@ -63,14 +64,14 @@ var _time = _.struct([
     valueFromBytes: function (buf, off) {
         off || (off = {bytes:0});
         
-        var _buf = new Buffer([buf[off.bytes+1], buf[off.bytes+0]]),
+        var _buf = __.bufferFrom([buf[off.bytes+1], buf[off.bytes+0]]),
             val = _time.valueFromBytes(_buf);
         off.bytes += this.size;
         return val;
     },
     bytesFromValue: function (val, buf, off) {
         val || (val = {hours:0, minutes:0, seconds_2:0});
-        buf || (buf = new Buffer(this.size));
+        buf || (buf = __.allocBuffer(this.size));
         off || (off = {bytes:0});
         
         var _buf = _time.bytesFromValue(val);
@@ -90,14 +91,14 @@ var _date = _.struct([
     valueFromBytes: function (buf, off) {
         off || (off = {bytes:0});
         
-        var _buf = new Buffer([buf[off.bytes+1], buf[off.bytes+0]]),
+        var _buf = __.bufferFrom([buf[off.bytes+1], buf[off.bytes+0]]),
             val = _date.valueFromBytes(_buf);
         off.bytes += this.size;
         return val;
     },
     bytesFromValue: function (val, buf, off) {
         val || (val = {year:0, month:0, day:0});
-        buf || (buf = new Buffer(this.size));
+        buf || (buf = __.allocBuffer(this.size));
         off || (off = {bytes:0});
         
         var _buf = _date.bytesFromValue(val);
