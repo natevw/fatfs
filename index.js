@@ -18,14 +18,11 @@ exports.createFileSystem = function (volume, opts, cb) {
         modmode: 0111,       // or `07000`
         umask: ('umask' in process) ? process.umask() : 0022,
         uid: ('getuid' in process) ? process.getuid() : 0,
-        gid: ('getgid' in process) ? process.getgid() : 0,
-        allowLowercaseNames: false
+        gid: ('getgid' in process) ? process.getgid() : 0
     }, opts);
     if (!volume.writeSectors) opts.ro = true;
     if (opts.ro) opts.noatime = true;       // natch
     
-    const allowLowercaseNames = opts.allowLowercaseNames
-
     var fs = new events.EventEmitter(),
         vol = null,
         dir = require("./dir.js"),
@@ -107,7 +104,7 @@ exports.createFileSystem = function (volume, opts, cb) {
             else fs._sharedEntryForSteps(steps, {}, function (e,parentInfo) {  // n.b. `steps` don't include `name`
                 if (e) cb(e);
                 else if (!parentInfo.entry.Attr.directory) cb(S.err.NOTDIR())
-                else dir.findInDirectory(vol, parentInfo.chain, name, opts, allowLowercaseNames, function (e,entry) {
+                else dir.findInDirectory(vol, parentInfo.chain, name, opts, function (e,entry) {
                     if (e && !opts.prepareForCreate) cb(e);
                     else if (e) cb(e, {missingChild:_.extend(entry, {name:name}), parent:parentInfo});
                     else cb(null, fs._createSharedEntry(path, entry, vol.chainForCluster(entry._firstCluster), parentInfo));
@@ -117,7 +114,7 @@ exports.createFileSystem = function (volume, opts, cb) {
         
         fs._updateEntry = dir.updateEntry.bind(dir, vol);
         fs._makeStat = dir.makeStat.bind(dir, vol);
-        fs._addFile = dir.addFile.bind(dir, vol, allowLowercaseNames);
+        fs._addFile = dir.addFile.bind(dir, vol);
         fs._initDir = dir.init.bind(dir, vol);
     }
     

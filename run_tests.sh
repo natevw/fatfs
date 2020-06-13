@@ -24,18 +24,18 @@ if ! [[ $BLKID == *'LABEL_FATBOOT="cidata"'* ]]; then
   exit 1
 fi
 
-echo "blkid LABEL_FATBOOT valid"
+echo "blkid: LABEL_FATBOOT is valid"
 
-if ! [[ $BLKID == *'LABEL="cidata"'* ]]; then
+if ! [[ $BLKID == *'LABEL="CIDATA"'* ]]; then
   echo "blkid: LABEL is invalid"
   exit 1
 fi
 
-echo "blkid LABEL valid"
+echo "blkid: LABEL is valid"
 
-if ! [[ $DOSFSLABEL == *"cidata"* ]]; then
+if ! [[ $DOSFSLABEL == *"CIDATA"* ]]; then
   echo "dosfslabel: label is invalid"
   exit 1
 fi
 
-echo "dosfslabel LABEL valid"
+echo "dosfslabel: label is valid"

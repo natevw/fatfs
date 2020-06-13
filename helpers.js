@@ -71,20 +71,12 @@ exports.parseFlags = function (flags) {
 
 
 // TODO: these are great candidates for special test coverage!
-var _snInvalid = /[^A-Z0-9$%'-_@~`!(){}^#&.]/g;                         // NOTE: '.' is not valid but we split it away
-var _snInvalidWithLowercase = /[^A-Za-z0-9$%'-_@~`!(){}^#&.]/g;         // NOTE: '.' is not valid but we split it away
-exports.shortname = function (name, allowLowercaseNames) {
+var _snInvalid = /[^A-Z0-9$%'-_@~`!(){}^#&.]/g;         // NOTE: '.' is not valid but we split it away
+exports.shortname = function (name) {
     var lossy = false;
-    var regex
     // TODO: support preservation of case for otherwise non-lossy name!
-    if (allowLowercaseNames) {
-        regex = _snInvalidWithLowercase
-    } else {
-        regex = _snInvalid
-        name = name.toUpperCase()
-    }
-    name = name.replace(/ /g, '').replace(/^\.+/, '');
-    name = name.replace(regex, function () {
+    name = name.toUpperCase().replace(/ /g, '').replace(/^\.+/, '');
+    name = name.replace(_snInvalid, function () {
         lossy = true;
         return '_';
     });
@@ -108,6 +100,7 @@ exports.shortname = function (name, allowLowercaseNames) {
     } else while (basis3.length < 3) basis3 += ' ';
     
     return {filename:basis8, extension:basis3, _lossy:lossy};
+    return {basis:[basis8,basis3], lossy:lossy};
 };
 //shortname("autoexec.bat") => {basis:['AUTOEXEC','BAT'],lossy:false}
 //shortname("autoexecutable.batch") => {basis:['AUTOEXEC','BAT'],lossy:true}
