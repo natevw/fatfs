@@ -14,7 +14,7 @@ rm tests/label.img || true
 
 set -e
 
-npm run label-test
+npm run label-testcase
 
 BLKID=$(blkid tests/label.img)
 DOSFSLABEL=$(dosfslabel tests/label.img)

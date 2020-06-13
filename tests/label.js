@@ -1,7 +1,5 @@
-// import fatfsBuffer, { init as fatfsBufferInit } from './fatfs-buffer'
 const promisifyAll = require('promise-toolbox').promisifyAll;
 var fatfs = require("../");
-const { fatStat } = require('../structs');
 var fatfsBuffer = require('./fatfs-buffer').buffer
 var fatfsBufferInit = require('./fatfs-buffer').init
 var fs = require('fs')
