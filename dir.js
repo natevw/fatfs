@@ -251,7 +251,7 @@ dir.init = function (vol, dirInfo, cb) {
     dirChain.writeToPosition(0, initialCluster, cb);
 };
 
-dir.addFile = function (vol, dirChain, entryInfo, opts, cb) {
+dir.addFile = function (vol, allowLowercaseNames, dirChain, entryInfo, opts, cb) {
     if (typeof opts === 'function') {
         cb = opts;
         opts = {};
@@ -259,7 +259,7 @@ dir.addFile = function (vol, dirChain, entryInfo, opts, cb) {
     var name = entryInfo.name,
         entries = [], mainEntry;
     entries.push(mainEntry = {
-        Name: _.shortname(name),
+        Name: _.shortname(name, allowLowercaseNames),
         Attr: {directory:opts.dir||false},
         _name: name
     });
@@ -328,9 +328,9 @@ dir.addFile = function (vol, dirChain, entryInfo, opts, cb) {
     });
 };
 
-dir.findInDirectory = function (vol, dirChain, name, opts, cb) {
+dir.findInDirectory = function (vol, dirChain, name, opts, allowLowercaseNames, cb) {
     var matchName = name.toUpperCase(),
-        tailName = (opts.prepareForCreate) ? _.shortname(name) : null,
+        tailName = (opts.prepareForCreate) ? _.shortname(name, allowLowercaseNames) : null,
         maxTail = 0;
     
     function processNext(next) {

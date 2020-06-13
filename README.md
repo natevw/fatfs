@@ -34,6 +34,7 @@ The `opts` dictionary you pass to `fatfs.createFileSystem` can contain any of th
 * `umask` — any bits *set* in this octal number will be *unset* in the 'mode' field from `fs.stat`–family calls. It does not affect anything else. Defaults to `process.umask()`, or `0022` if that is unavailable.
 * `uid` — This value will be returned as the 'uid' stat field. It does not affect anything else. Defaults to `process.getuid()`, or `0` if that is unavailable.
 * `gid` — This value will be returned as the 'gid' stat field. It does not affect anything else. Defaults to `process.getgid()`, or `0` if that is unavailable.
+* `allowLowercaseNames` - This value disables automatic conversion from lowercase to uppercase. While it's illegal for DOS, it's required for linux lowercase labels (https://github.com/natevw/fatfs/issues/30)
 
 (Note that these are similar to the options you could use with a POSIX `mount` operation.)
 
