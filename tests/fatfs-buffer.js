@@ -1,20 +1,4 @@
-// Buffer driver for [fatfs](https://github.com/natevw/fatfs).
-//
-// Usage:
-//
-// ```js
-// import fatfs from 'fatfs'
-// import fatfsBuffer, { init as fatfsBufferInit } from './fatfs-buffer'
-//
-// const buffer = fatfsBufferinit()
-//
-// const fs = fatfs.createFileSystem(fatfsBuffer(buffer))
-//
-// fs.writeFile('/foo', 'content of foo', function (err, content) {
-//   if (err) {
-//     console.error(err)
-//   }
-// })
+//From https://github.com/vatesfr/xen-orchestra/blob/9f0b22d3e9c4672d96cb3f63b1e0fd42609e2406/packages/xo-server/src/fatfs-buffer.js
 
 var assert = require('assert')
 
