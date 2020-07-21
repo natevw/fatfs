@@ -557,6 +557,20 @@ exports.createFileSystem = function (volume, opts, cb) {
         else _.delayedCall(cb, S.err.NOSYS());
     }, (_n_ === '_nested_')); };
     
+    fs.createLabel = function (name, cb) {
+        fs.open(name, "a", (e, _fd) => {
+            if (e) {
+                cb(e);
+            } else {
+                let fd = fileDescriptors[_fd]
+                fd.entry.Attr.volume_id = true
+                fd.entry.FstClusLO = 0
+                fd.entry.FstClusHI = 0
+
+                fs._updateEntry(fd.entry, {}, cb);
+            }
+        })
+    };
     
     return fs;
 }
