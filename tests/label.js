@@ -1,15 +1,8 @@
-const promisifyAll = require('promise-toolbox').promisifyAll;
 var fatfs = require("../");
-var fatfsBuffer = require('./fatfs-buffer').buffer
-var fatfsBufferInit = require('./fatfs-buffer').init
-var fs = require('fs')
+var createDriverSync = require("../img_volume").createDriverSync
 
-const buffer = fatfsBufferInit({ label: 'cidata     ' })
+const buffer = createDriverSync("tests/label.img")
 
-const { createLabel } = promisifyAll(
-  fatfs.createFileSystem(fatfsBuffer(buffer), {allowLowercaseNames: true})
-)
+const fs = fatfs.createFileSystem(buffer, {allowLowercaseNames: true})
 
-createLabel("cidata").then(() => {
-  fs.writeFileSync("tests/label.img", buffer)
-})
+fs.createLabel("cidata", () => {})

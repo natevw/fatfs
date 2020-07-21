@@ -14,17 +14,13 @@ rm tests/label.img || true
 
 set -e
 
+dd if=/dev/zero of=tests/label.img bs=1M count=10
+mkfs.vfat tests/label.img
+
 npm run label-testcase
 
 BLKID=$(blkid tests/label.img)
 DOSFSLABEL=$(dosfslabel tests/label.img)
-
-if ! [[ $BLKID == *'LABEL_FATBOOT="cidata"'* ]]; then
-  echo "blkid: LABEL_FATBOOT is invalid"
-  exit 1
-fi
-
-echo "blkid: LABEL_FATBOOT is valid"
 
 if ! [[ $BLKID == *'LABEL="CIDATA"'* ]]; then
   echo "blkid: LABEL is invalid"

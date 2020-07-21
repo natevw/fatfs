@@ -558,19 +558,17 @@ exports.createFileSystem = function (volume, opts, cb) {
     }, (_n_ === '_nested_')); };
     
     fs.createLabel = function (name, cb) {
-        fs.writeFile(name, "", () => {
-            fs.open(name, "w", (e,_fd) => {
-                if (e) {
-                    throw '_open_error_'
-                } else {
-                    let fd = fileDescriptors[_fd]
-                    fd.entry.Attr.volume_id = true
-                    fd.entry.FstClusLO = 0
-                    fd.entry.FstClusHI = 0
+        fs.open(name, "a", (e,_fd) => {
+            if (e) {
+                throw '_open_error_'
+            } else {
+                let fd = fileDescriptors[_fd]
+                fd.entry.Attr.volume_id = true
+                fd.entry.FstClusLO = 0
+                fd.entry.FstClusHI = 0
 
-                    fs._updateEntry(fd.entry, {}, cb);
-                }
-            }, '_nested_')
+                fs._updateEntry(fd.entry, {}, cb);
+            }
         })
     };
     

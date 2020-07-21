@@ -7,9 +7,6 @@
     "test": "echo \"Error: no test specified\" && exit 1",
     "label-testcase": "nodejs tests/label.js"
   },
-  "devDependencies": {
-    "promise-toolbox": "0.15.1"
-  },
   "repository": {
     "type": "git",
     "url": "https://github.com/natevw/fatfs"
