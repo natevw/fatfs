@@ -558,9 +558,9 @@ exports.createFileSystem = function (volume, opts, cb) {
     }, (_n_ === '_nested_')); };
     
     fs.createLabel = function (name, cb) {
-        fs.open(name, "a", (e,_fd) => {
+        fs.open(name, "a", (e, _fd) => {
             if (e) {
-                throw '_open_error_'
+                cb(e);
             } else {
                 let fd = fileDescriptors[_fd]
                 fd.entry.Attr.volume_id = true
