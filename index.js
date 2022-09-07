@@ -188,7 +188,7 @@ exports.createFileSystem = function (volume, opts, cb) {
     
     fs.read = function (fd, buf, off, len, pos, cb, _n_) { cb = GROUP(cb, function () {
         var _fd = fileDescriptors[fd];
-        if (!_fd || !_fd.flags.read) _.delayedCall(cb, S.err.BADF());
+        if (!_fd || !_fd.flags.read) return _.delayedCall(cb, S.err.BADF());
         
         var _pos = (pos === null) ? _fd.pos : pos,
             _len = Math.min(len, _fd.entry._size - _pos),
@@ -233,7 +233,7 @@ exports.createFileSystem = function (volume, opts, cb) {
     
     fs.write = function (fd, buf, off, len, pos, cb, _n_) { cb = GROUP(cb, function () {
         var _fd = fileDescriptors[fd];
-        if (!_fd || !_fd.flags.write) _.delayedCall(cb, S.err.BADF());
+        if (!_fd || !_fd.flags.write) return _.delayedCall(cb, S.err.BADF());
         
         var _pos = (pos === null || _fd.flags.append) ? _fd.pos : pos,
             _buf = buf.slice(off,off+len);
@@ -258,7 +258,7 @@ exports.createFileSystem = function (volume, opts, cb) {
     
     fs.ftruncate = function (fd, len, cb, _n_) { cb = GROUP(cb, function () {
         var _fd = fileDescriptors[fd];
-        if (!_fd || !_fd.flags.write) _.delayedCall(cb, S.err.BADF());
+        if (!_fd || !_fd.flags.write) return _.delayedCall(cb, S.err.BADF());
         
         var newStats = {size:len,_touch:true};
         // NOTE: we order operations for best state in case of only partial success
