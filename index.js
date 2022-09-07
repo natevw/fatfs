@@ -206,23 +206,22 @@ exports.createFileSystem = function (volume, opts, cb) {
     
     fs._readdir = function (fd, cb, _n_)  { cb = GROUP(cb, function () {
         var _fd = fileDescriptors[fd];
-        if (!_fd || !_fd.flags.read) _.delayedCall(cb, S.err.BADF());
-        else {
-            var entryNames = [],
-                getNextEntry = fs._dirIterator(_fd.chain);
-            function processNext() {
-                getNextEntry(function (e,d) {
-                    if (e) cb(e);
-                    else if (!d && !entryNames.length) cb(null, entryNames); // WORKAROUND: https://github.com/tessel/beta/issues/435
-                    else if (!d) cb(null, entryNames.sort());       // NOTE: sort not required, but… [simplifies tests for starters!]
-                    else {
-                        if (d._name !== "." && d._name !== "..") entryNames.push(d._name);
-                        processNext();
-                    }
-                });
-            }
-            processNext();
+        if (!_fd || !_fd.flags.read) return _.delayedCall(cb, S.err.BADF());
+        
+        var entryNames = [],
+            getNextEntry = fs._dirIterator(_fd.chain);
+        function processNext() {
+            getNextEntry(function (e,d) {
+                if (e) cb(e);
+                else if (!d && !entryNames.length) cb(null, entryNames); // WORKAROUND: https://github.com/tessel/beta/issues/435
+                else if (!d) cb(null, entryNames.sort());       // NOTE: sort not required, but… [simplifies tests for starters!]
+                else {
+                    if (d._name !== "." && d._name !== "..") entryNames.push(d._name);
+                    processNext();
+                }
+            });
         }
+        processNext();
     }, (_n_ === '_nested_')); };
     
     fs._mkdir = function (fd, cb, _n_) { cb = GROUP(cb, function () {
